@@ -12,7 +12,7 @@ Use one of the following ways:
 
 2. Run the following command:
 
-    *⚠need golang sdk installed*
+    *⚠need [golang](https://go.dev/) sdk installed*
 
     `go install github.com/dashengyeah/xlsxcfg/bin/xlsxcfg`
 
