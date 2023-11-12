@@ -5,7 +5,7 @@ proto:
   # proto message import paths.
   import_path: ["."]
 
-# xls sheet config
+# xlsx sheet config
 sheet:
   # rows that is comment, will ignore
   # in parsing
