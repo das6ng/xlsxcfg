@@ -4,9 +4,15 @@ xlsxcfg load config data from excel sheets.
 
 ## Installation
 
-*⚠Currently needs golang sdk*
+Use one of the following ways:
 
-Run the following command:
+1. Download from [release](https://github.com/dashengyeah/xlsxcfg/releases).
+
+Recommend to add it to your `PATH` env.
+
+2. Run the following command:
+
+⚠need golang sdk
 
 `go install github.com/dashengyeah/xlsxcfg/bin/xlsxcfg`
 
