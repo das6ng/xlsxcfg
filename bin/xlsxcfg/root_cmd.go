@@ -16,9 +16,9 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "xlsxcfg [OPTIONs] [excel files]",
+	Use:   "xlsxcfg [flags] [xlsx files...]",
 	Short: "xlsxcfg is a config parser",
-	Long:  `A parser that converts Excel sheets to Protocol Buffer defined config structures.`,
+	Long:  `A parser that converts xlsx sheets to Protocol Buffer defined config data.`,
 	Run:   run,
 }
 

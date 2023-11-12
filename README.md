@@ -7,12 +7,71 @@ xlsxcfg load config data from excel sheets.
 Use one of the following ways:
 
 1. Download from [release](https://github.com/dashengyeah/xlsxcfg/releases).
-Recommend to add it to your `PATH` env.
+
+    Recommended to add it to your `PATH` env.
 
 2. Run the following command:
-*⚠need golang sdk installed*
 
-`go install github.com/dashengyeah/xlsxcfg/bin/xlsxcfg`
+    *⚠need golang sdk installed*
+
+    `go install github.com/dashengyeah/xlsxcfg/bin/xlsxcfg`
+
+## Usage
+
+```
+Usage:
+  xlsxcfg [flags] [xlsx files...]
+Flags:
+  -c, --config string    config file (default "xlsxcfg.yaml")
+      --example-config   export an example config file here
+  -h, --help             help for xlsxcfg
+```
+
+Dir structure:
+
+```
+./
+|- proto
+|  |
+|  |- example.proto
+|
+|- example.xlsx
+|- example1.xlsx
+|- example2.xlsx
+|- xlsxcfg.yaml
+
+```
+
+`xlsxcfg.yaml`
+```yaml
+proto:
+  files: ["proto/example.proto"]
+  import_path: ["proto"]
+sheet:
+  comment_rows: [1]
+  meta_row: 2
+  data_row_start: 3
+  type_suffix: "Sheet"
+  list_field_name: "List"
+  row_type_suffix: "SheetRow"
+output:
+  dir: "."
+  write_json: true
+  json_indent: "  "
+  write_bytes: true
+```
+
+1. full example:
+
+    `xlsxcfg -c xlsxcfg.yaml example.xlsx`
+
+2. if the config file is named `xlsxcfg.yaml` and is in current dir, the config file flag can be ommitted.
+
+    `xlsxcfg example.xlsx`
+
+3. it's allowed to specified more than one excel files in the same time.
+
+    `xlsxcfg -c xlsxcfg.yaml example.xlsx example1.xlsx example2.xlsx`
 
 ## Config
 
