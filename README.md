@@ -11,6 +11,7 @@ Recommend to add it to your `PATH` env.
 
 2. Run the following command:
 *⚠need golang sdk installed*
+
 `go install github.com/dashengyeah/xlsxcfg/bin/xlsxcfg`
 
 ## Config
