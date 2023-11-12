@@ -27,5 +27,5 @@ jobs:
             xlsxcfg_windows_amd64.exe
             xlsxcfg_darwin_amd64
             xlsxcfg_darwin_arm64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # env:
+        #   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
