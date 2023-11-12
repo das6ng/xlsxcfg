@@ -1,0 +1,17 @@
+syntax            = "proto3";
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+import "deps.proto";
+
+message MemberSheetRow {
+    int32                ID      = 1;
+    string               Name    = 2;
+    string               Address = 3;
+    PhoneNumber          Phone   = 4;
+    repeated string      Cities  = 5;
+    repeated PhoneNumber PP      = 6;
+}
+
+message MemberSheet {
+    repeated MemberSheetRow List = 1;
+}

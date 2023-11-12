@@ -1,0 +1,17 @@
+proto:
+  files:
+    - "example.proto"
+  import_path:
+    - "."
+sheet:
+  comment_rows: [1]
+  meta_row: 2
+  data_row_start: 3
+  type_suffix: "Sheet"
+  list_field_name: "List"
+  row_type_suffix: "SheetRow"
+output:
+  dir: "."
+  write_json: true
+  json_indent: "  "
+  write_bytes: true

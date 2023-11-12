@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message PhoneNumber {
+    int64  Region = 1;
+    int64  No     = 2;
+    string Ext    = 3;
+}
