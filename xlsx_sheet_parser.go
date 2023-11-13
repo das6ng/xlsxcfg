@@ -3,61 +3,59 @@ package xlsxcfg
 import "context"
 
 type sheetParser struct {
-	name   string
-	maxRow int
-	cols   [][]string
-	param  *Parameter
+	typeName string
+	maxRow   int
+	cols     [][]string
+	param    *Config
 }
 
-func newSheetParser(p *Parameter) *sheetParser {
+func newSheetParser(p *Config) *sheetParser {
 	return &sheetParser{param: p}
 }
 
-func (sl *sheetParser) SetName(name string) {
-	sl.name = name
+func (p *sheetParser) SetName(name string) {
+	p.typeName = name
 }
 
-func (sl *sheetParser) Feed(cells []string) {
-	sl.cols = append(sl.cols, cells)
-	if sl.maxRow < len(cells) {
-		sl.maxRow = len(cells)
+func (p *sheetParser) Feed(cells []string) {
+	p.cols = append(p.cols, cells)
+	if p.maxRow < len(cells) {
+		p.maxRow = len(cells)
 	}
 }
 
 // Parse one xls sheet
-func (sl *sheetParser) Parse(ctx context.Context) ([]any, error) {
-	colCount := len(sl.cols)
-	rp := &rowParser{
-		param: sl.param,
-		isStr: func(fieldPath string) bool {
-			return sl.param.IsStrField(sl.name, fieldPath)
-		},
-	}
-	res := make([]any, 0, sl.maxRow)
-	dataRows := make([][]string, 0, sl.maxRow)
-	for i := 0; i < sl.maxRow; i++ {
+func (p *sheetParser) Parse(ctx context.Context) ([]any, error) {
+	colCount := len(p.cols)
+	rowParser := newRowParser(p.typeName, p.param)
+	result := make([]any, 0, p.maxRow)
+	dataRows := make([][]string, 0, p.maxRow)
+	for i := 0; i < p.maxRow; i++ {
 		row := make([]string, 0, colCount)
-		for _, col := range sl.cols {
+		for _, col := range p.cols {
 			if len(col) > i {
 				row = append(row, col[i])
 			} else {
 				row = append(row, "")
 			}
 		}
-		if sl.param.IsMeta(i, row) {
-			rp.Meta(ctx, row)
-		} else if sl.param.IsComment(i, row) {
+		if p.param.IsMeta(i, row) {
+			rowParser.Meta(ctx, row)
+		} else if p.param.IsComment(i, row) {
 			// comment row, skip
-		} else if sl.param.IsData(i, row) {
+		} else if p.param.IsData(i, row) {
 			dataRows = append(dataRows, row)
 		}
 	}
 	for _, row := range dataRows {
-		rowData, err := rp.Parse(ctx, row)
+		rowData, err := rowParser.Parse(ctx, row)
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, rowData)
+		if rowData == nil {
+			continue
+		}
+		result = append(result, rowData)
 	}
-	return res, nil
+	return result, nil
 }

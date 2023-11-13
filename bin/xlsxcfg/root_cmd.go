@@ -46,9 +46,9 @@ func run(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatalln("load proto files failed:", err)
 	}
-	sheetsData, err := xlsxcfg.LoadXlsxFiles(ctx, xlsxcfg.NewParameter(cfg, typeProvider), args...)
+	sheetsData, err := xlsxcfg.LoadXlsxFiles(ctx, xlsxcfg.NewConfig(cfg, typeProvider), args...)
 	if err != nil {
-		log.Fatalln("parse xls files failed:", err)
+		log.Fatalln("parse xlsx files failed:", err)
 	}
 
 	msgFactory := dynamic.NewMessageFactoryWithDefaults()
@@ -77,7 +77,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 }
 
-func writeFile(cfg *xlsxcfg.Config, sheet string, msg protoiface.MessageV1, jm *jsonpb.Marshaler) {
+func writeFile(cfg *xlsxcfg.ConfigFile, sheet string, msg protoiface.MessageV1, jm *jsonpb.Marshaler) {
 	if cfg.Output.WriteBytes {
 		// output proto bytes file
 		buf, err := proto.Marshal(msg)

@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type Config struct {
+type ConfigFile struct {
 	Proto struct {
 		Files      []string `yaml:"files"`
 		ImportPath []string `yaml:"import_path"`
@@ -29,8 +29,8 @@ type Config struct {
 	} `yaml:"output"`
 }
 
-func ConfigFromFile(f string) (*Config, error) {
-	c := &Config{}
+func ConfigFromFile(f string) (*ConfigFile, error) {
+	c := &ConfigFile{}
 	if bs, err := os.ReadFile(f); err != nil {
 		return nil, err
 	} else if err = yaml.Unmarshal(bs, c); err != nil {
@@ -39,19 +39,19 @@ func ConfigFromFile(f string) (*Config, error) {
 	return c, nil
 }
 
-type Parameter struct {
-	*Config
+type Config struct {
+	*ConfigFile
 	tp TypeProvidor
 }
 
-func NewParameter(cfg *Config, tp TypeProvidor) *Parameter {
-	return &Parameter{
-		Config: cfg,
-		tp:     tp,
+func NewConfig(cfg *ConfigFile, tp TypeProvidor) *Config {
+	return &Config{
+		ConfigFile: cfg,
+		tp:         tp,
 	}
 }
 
-func (p *Parameter) IsStrField(typeName, fieldPath string) bool {
+func (p *Config) IsStrField(typeName, fieldPath string) bool {
 	md := p.tp.MessageByName(typeName)
 	if md == nil {
 		log.Println("message " + typeName + " cannot find in proto messages")
@@ -60,8 +60,8 @@ func (p *Parameter) IsStrField(typeName, fieldPath string) bool {
 	return IsStrField(md, strings.Split(fieldPath, ".")...)
 }
 
-func (p *Parameter) IsComment(i int, row []string) bool {
-	for _, l := range p.Config.Sheet.CommentRows {
+func (p *Config) IsComment(i int, row []string) bool {
+	for _, l := range p.ConfigFile.Sheet.CommentRows {
 		if l == i+1 {
 			return true
 		}
@@ -69,10 +69,10 @@ func (p *Parameter) IsComment(i int, row []string) bool {
 	return false
 }
 
-func (p *Parameter) IsMeta(i int, row []string) bool {
-	return i+1 == p.Config.Sheet.MetaRow
+func (p *Config) IsMeta(i int, row []string) bool {
+	return i+1 == p.ConfigFile.Sheet.MetaRow
 }
 
-func (p *Parameter) IsData(i int, row []string) bool {
+func (p *Config) IsData(i int, row []string) bool {
 	return i+1 >= p.Sheet.DataRowStart
 }

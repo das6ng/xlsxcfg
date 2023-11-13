@@ -7,27 +7,36 @@ import (
 )
 
 type rowParser struct {
-	param    *Parameter
+	param    *Config
 	isStr    func(fieldPath string) bool
 	errStack []error
 	hasMeta  bool
 
 	res   map[string]any
-	fn    []func(v string)
+	set   []func(v string)
 	fnGet map[string]func() any
 	fnSet map[string]func(v any)
 }
 
+func newRowParser(typeName string, param *Config) *rowParser {
+	return &rowParser{
+		param: param,
+		isStr: func(fieldPath string) bool {
+			return param.IsStrField(typeName, fieldPath)
+		},
+	}
+}
+
 // Meta feed metadata row to the parser.
-func (t *rowParser) Meta(ctx context.Context, row []string) {
-	t.fnGet = make(map[string]func() any, len(row))
-	t.fnSet = make(map[string]func(v any), len(row))
-	t.fn = make([]func(v string), 0, len(row))
-	t.res = make(map[string]any)
-	t.fnGet[""] = func() any { return t.res } // top level getter
+func (p *rowParser) Meta(ctx context.Context, row []string) {
+	p.fnGet = make(map[string]func() any, len(row))
+	p.fnSet = make(map[string]func(v any), len(row))
+	p.set = make([]func(v string), 0, len(row))
+	p.res = make(map[string]any)
+	p.fnGet[""] = func() any { return p.res } // top level getter
 	for _, meta := range row {
 		if meta == "" {
-			t.fn = append(t.fn, func(_ string) {})
+			p.set = append(p.set, func(_ string) {})
 			continue
 		}
 		tr := newTokenReader(meta)
@@ -38,49 +47,55 @@ func (t *rowParser) Meta(ctx context.Context, row []string) {
 			typePath := tr.TypePath()
 			// log.Printf("head: %s -- ident: %s -- prevIdent: %s -- fullIdent: %s -- typePath: %s\n", hd, ident, prevIdent, fullIdent, typePath)
 			if ai := tr.ListIndex(); ai >= 0 {
-				t.metaList(ident, prevIdent, fullIdent, typePath, ai-1)
-				if !tr.HasNext() {
-					// end at list item
-					t.fn = append(t.fn, func(v string) {
-						// log.Printf("arr set [%s] to [%s]\n", fullIdent, v)
-						t.fnSet[fullIdent](t.convertVal(typePath, fullIdent, v))
-					})
-				}
+				p.metaList(ident, prevIdent, fullIdent, typePath, ai-1, !tr.HasNext())
 			} else if tr.HasNext() {
-				t.metaStruct(ident, prevIdent, fullIdent, typePath)
+				p.metaStruct(ident, prevIdent, fullIdent, typePath)
 			} else {
-				t.metaField(ident, prevIdent, fullIdent, typePath)
+				p.metaField(ident, prevIdent, fullIdent, typePath)
 			}
 		}
 	}
-	t.hasMeta = true
+	p.hasMeta = true
 }
 
 // Parse parse one data row, MUST called after feed metadata.
-func (t *rowParser) Parse(ctx context.Context, row []string) (map[string]any, error) {
-	if !t.hasMeta {
+func (p *rowParser) Parse(ctx context.Context, row []string) (map[string]any, error) {
+	if !p.hasMeta {
 		return nil, fmt.Errorf("row parser no metadata")
 	}
-	t.res = make(map[string]any)
-	for i, cell := range row {
-		if i < len(t.fn) {
-			t.fn[i](cell)
+	p.res = make(map[string]any)
+	ni := len(row) - 1
+	for ; ni >= 0; ni-- {
+		if row[ni] != "" {
+			break
 		}
 	}
-	if len(t.errStack) > 0 {
-		return nil, t.errStack[0]
+	if ni < 0 {
+		return nil, nil
 	}
-	return t.res, nil
+	row = row[:ni+1]
+	for i, cell := range row {
+		if i < len(p.set) {
+			p.set[i](cell)
+		}
+	}
+	if len(p.errStack) > 0 {
+		return nil, p.errStack[0]
+	}
+	return p.res, nil
 }
 
-func (t *rowParser) convertVal(typePath, fullIdent, v string) any {
+func (p *rowParser) convertVal(typePath, fullIdent, v string) any {
 	var res any
-	if t.isStr(typePath) {
+	if p.isStr(typePath) {
 		res = v
 	} else {
+		if v == "" {
+			v = "0"
+		}
 		n, e := strconv.ParseInt(v, 10, 64)
 		if e != nil {
-			t.errStack = append(t.errStack, fmt.Errorf("parse col[%s] as number failed: %v", fullIdent, e))
+			p.errStack = append(p.errStack, fmt.Errorf("parse col[%s] as number failed: %v", fullIdent, e))
 		} else {
 			res = n
 		}
@@ -88,63 +103,76 @@ func (t *rowParser) convertVal(typePath, fullIdent, v string) any {
 	return res
 }
 
-func (t *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, ai int) {
-	fullIdentList := ident
-	if prevIdent != "" {
-		fullIdentList = prevIdent + "." + ident
-	}
-	getList := t.fnGet[fullIdentList]
-	if getList == nil {
-		getList = func() any {
-			arr := t.fnGet[prevIdent]().(map[string]any)[ident]
-			if arr == nil || len(arr.([]any)) <= ai {
-				if arr != nil {
-					oa := arr.([]any)
-					na := make([]any, ai+1)
-					copy(na, oa)
-					arr = na
-				} else {
-					arr = make([]any, ai+1)
-				}
-				t.fnGet[prevIdent]().(map[string]any)[ident] = arr
+func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx int, isEnd bool) {
+	p.fnGet[fullIdent] = func() any {
+		list := p.fnGet[prevIdent]().(map[string]any)[ident]
+		if list == nil || len(list.([]any)) <= idx {
+			if list != nil {
+				oldList := list.([]any)
+				newList := make([]any, idx+1)
+				copy(newList, oldList)
+				list = newList
+			} else {
+				list = make([]any, idx+1)
 			}
-			return arr
+			p.fnGet[prevIdent]().(map[string]any)[ident] = list
 		}
-		t.fnGet[fullIdentList] = getList
+		return list.([]any)[idx]
 	}
-	t.fnGet[fullIdent] = func() any {
-		arr := getList()
-		return arr.([]any)[ai]
+	p.fnSet[fullIdent] = func(v any) {
+		list := p.fnGet[prevIdent]().(map[string]any)[ident]
+		if list == nil || len(list.([]any)) <= idx {
+			if list != nil {
+				oldList := list.([]any)
+				newList := make([]any, idx+1)
+				copy(newList, oldList)
+				list = newList
+			} else {
+				list = make([]any, idx+1)
+			}
+			p.fnGet[prevIdent]().(map[string]any)[ident] = list
+		}
+		list.([]any)[idx] = v
 	}
-	t.fnSet[fullIdent] = func(v any) {
-		arr := getList()
-		arr.([]any)[ai] = v
+	if !isEnd {
+		return
 	}
+	// end at list item
+	p.set = append(p.set, func(v string) {
+		// log.Printf("arr set [%s] to [%s]\n", fullIdent, v)
+		if v == "" {
+			return
+		}
+		p.fnSet[fullIdent](p.convertVal(typePath, fullIdent, v))
+	})
 }
 
-func (t *rowParser) metaStruct(ident, prevIdent, fullIdent, typePath string) {
-	t.fnGet[fullIdent] = func() any {
-		return t.fnGet[prevIdent]().(map[string]any)[ident]
+func (p *rowParser) metaStruct(ident, prevIdent, fullIdent, typePath string) {
+	p.fnGet[fullIdent] = func() any {
+		return p.fnGet[prevIdent]().(map[string]any)[ident]
 	}
-	t.fnSet[fullIdent] = func(v any) {
-		prev := t.fnGet[prevIdent]()
+	p.fnSet[fullIdent] = func(v any) {
+		prev := p.fnGet[prevIdent]()
 		if prev == nil {
 			prev = map[string]any{}
-			t.fnSet[prevIdent](prev)
+			p.fnSet[prevIdent](prev)
 		}
 		prev.(map[string]any)[ident] = v
 	}
 }
 
-func (t *rowParser) metaField(ident, prevIdent, fullIdent, typePath string) {
+func (p *rowParser) metaField(ident, prevIdent, fullIdent, typePath string) {
 	// end at a field
-	t.fn = append(t.fn, func(v string) {
+	p.set = append(p.set, func(v string) {
 		// log.Printf("set [%s] to [%s]\n", fullIdent, v)
-		prev := t.fnGet[prevIdent]()
+		if v == "" {
+			return
+		}
+		prev := p.fnGet[prevIdent]()
 		if prev == nil {
 			prev = map[string]any{}
-			t.fnSet[prevIdent](prev)
+			p.fnSet[prevIdent](prev)
 		}
-		prev.(map[string]any)[ident] = t.convertVal(typePath, fullIdent, v)
+		prev.(map[string]any)[ident] = p.convertVal(typePath, fullIdent, v)
 	})
 }

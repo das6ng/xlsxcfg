@@ -7,7 +7,7 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func LoadXlsxFiles(ctx context.Context, param *Parameter, files ...string) (data map[string][]any, err error) {
+func LoadXlsxFiles(ctx context.Context, param *Config, files ...string) (data map[string][]any, err error) {
 	data = map[string][]any{}
 	var configData map[string][]any
 	for _, xlsFile := range files {
@@ -25,7 +25,7 @@ func LoadXlsxFiles(ctx context.Context, param *Parameter, files ...string) (data
 	return
 }
 
-func loadXlsxFile(ctx context.Context, filePath string, param *Parameter) (data map[string][]any, err error) {
+func loadXlsxFile(ctx context.Context, filePath string, param *Config) (data map[string][]any, err error) {
 	f, err := excelize.OpenFile(filePath)
 	if err != nil {
 		return
