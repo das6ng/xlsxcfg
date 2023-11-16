@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/constant";
+
+message ConstantEntry {
+    string Key = 1;
+    string Val = 2;
+}
+
+message ConstantList {
+    repeated ConstantEntry Data = 1;
+}

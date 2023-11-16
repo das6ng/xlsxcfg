@@ -1,6 +1,10 @@
 .PHONY: xlscfg
 xlscfg:
-	go build -o build/xlscfg ./bin/xlscfg
+	go build -o build/xlsxcfg ./bin/xlsxcfg
+
+.PHONY: constant
+constant:
+	protoc --proto_path=./constant --go_out=./constant --go_opt=paths=source_relative constant.proto
 
 .PHONY: test_pb
 test_pb:
