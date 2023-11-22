@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/dashengyeah/xlsxcfg"
+	"github.com/das6ng/xlsxcfg"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/dynamic"

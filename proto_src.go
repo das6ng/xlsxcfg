@@ -58,7 +58,7 @@ func addFile(fd *desc.FileDescriptor, fds map[string]*desc.FileDescriptor) error
 		// already added this file
 		if existing != fd {
 			// doh! duplicate files provided
-			return fmt.Errorf("given files include multiple copies of %q", name)
+			return fmt.Errorf("given files include multiple copies of %s", name)
 		}
 		return nil
 	}

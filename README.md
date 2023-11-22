@@ -6,7 +6,7 @@ xlsxcfg load config data from excel sheets.
 
 Use one of the following ways:
 
-1. Download from [release](https://github.com/dashengyeah/xlsxcfg/releases).
+1. Download from [release](https://github.com/das6ng/xlsxcfg/releases).
 
     Recommended to add it to your `PATH` env.
 

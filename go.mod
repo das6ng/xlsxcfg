@@ -1,4 +1,4 @@
-module github.com/dashengyeah/xlsxcfg
+module github.com/das6ng/xlsxcfg
 
 go 1.20
 
