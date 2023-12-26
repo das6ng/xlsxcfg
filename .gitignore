@@ -28,3 +28,4 @@ go.work
 tests/*.bytes
 tests/*.json
 build
+output
