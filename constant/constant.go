@@ -68,7 +68,7 @@ func (d *Data) ExportJSON(ctx context.Context) (data []byte, err error) {
 	return
 }
 
-func (d *Data) loadFile(ctx context.Context, file string) error {
+func (d *Data) loadFile(_ context.Context, file string) error {
 	f, err := excelize.OpenFile(file)
 	if err != nil {
 		return err
