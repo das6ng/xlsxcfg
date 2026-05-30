@@ -27,5 +27,12 @@ go.work
 
 tests/*.bytes
 tests/*.json
+tests/flat_fields/*.xlsx
+tests/nested_structs/*.xlsx
+tests/repeated_fields/*.xlsx
+tests/edge_cases/*.xlsx
+tests/multi_sheet/*.xlsx
+tests/duplicate_sheet/*.xlsx
+tests/benchmark/*.xlsx
 build
 output

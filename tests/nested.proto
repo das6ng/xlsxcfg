@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message Address {
+    string Street = 1;
+    string City   = 2;
+    string Zip    = 3;
+}
+
+message Contact {
+    string Email = 1;
+    string Phone = 2;
+}
+
+message NestedSheetRow {
+    int32   ID      = 1;
+    string  Name    = 2;
+    Address Home    = 3;
+    Contact Info    = 4;
+}
+
+message NestedSheet {
+    repeated NestedSheetRow List = 1;
+}

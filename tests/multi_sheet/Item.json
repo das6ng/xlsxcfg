@@ -1,0 +1,19 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Name": "Sword",
+      "Price": "100"
+    },
+    {
+      "ID": 2,
+      "Name": "Shield",
+      "Price": "50"
+    },
+    {
+      "ID": 3,
+      "Name": "Potion",
+      "Price": "10"
+    }
+  ]
+}

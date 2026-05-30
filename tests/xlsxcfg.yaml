@@ -1,4 +1,5 @@
 proto:
+  enabled: true
   files:
     - "example.proto"
   import_path:
@@ -12,6 +13,10 @@ sheet:
   row_type_suffix: "SheetRow"
 output:
   dir: "."
-  write_json: true
-  json_indent: "  "
-  write_bytes: true
+  json:
+    enabled: true
+    dir: "."
+    indent: "  "
+  pb_bytes:
+    enabled: true
+    dir: "."

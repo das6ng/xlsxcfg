@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message HeroSheetRow {
+    int32  ID    = 1;
+    string Name  = 2;
+    int64  Level = 3;
+}
+
+message HeroSheet {
+    repeated HeroSheetRow List = 1;
+}
+
+message ItemSheetRow {
+    int32  ID    = 1;
+    string Name  = 2;
+    int64  Price = 3;
+}
+
+message ItemSheet {
+    repeated ItemSheetRow List = 1;
+}

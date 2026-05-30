@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message FlatSheetRow {
+    int32  ID     = 1;
+    int64  Count  = 2;
+    string Name   = 3;
+    int64  Active = 4;
+    int64  Score  = 5;
+}
+
+message FlatSheet {
+    repeated FlatSheetRow List = 1;
+}

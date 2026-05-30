@@ -1,0 +1,21 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Name": "FromDup1",
+      "Address": "Addr1",
+      "Phone": {
+        "Region": "86",
+        "No": "111"
+      },
+      "Cities": [
+        "City1"
+      ],
+      "PP": [
+        {
+          "Region": "1"
+        }
+      ]
+    }
+  ]
+}

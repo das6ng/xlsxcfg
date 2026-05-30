@@ -1,15 +1,16 @@
-# Protocol Buffer source config
+# Protocol Buffer schemas
 proto:
+  enabled: true
   # proto files need to parse.
-  files: ["example.proto"]
+  files: [ "example.proto" ]
   # proto message import paths.
-  import_path: ["."]
+  import_path: [ "." ]
 
 # xlsx sheet config
 sheet:
   # rows that is comment, will ignore
   # in parsing
-  comment_rows: [1]
+  comment_rows: [ 1 ]
   # row contains metadata
   meta_row: 2
   # rows contain config data from this
@@ -28,8 +29,40 @@ sheet:
 output:
   # output dir
   dir: "."
-  # json
-  write_json: true
-  json_indent: "  "
-  # proto bytes
-  write_bytes: true
+  # no schema, just transform raw sheet data
+  raw_json:
+    enabled: true
+    # output dir, specific for raw_json
+    dir: "."
+    # output file extension, default 'json'
+    extension: "json"
+    indent: "  "
+  # no schema, just transform raw sheet data
+  raw_msgpack:
+    enabled: true
+    # output dir
+    dir: "" # inherits `output.dir` when empty or not configured.
+    # output file extension, default 'msgpack'
+    extension: "msgpack"
+  # validated by protobuf schema, serialized to json
+  json:
+    enabled: true
+    # output dir
+    dir: "."
+    # output file extension, default 'json'
+    extension: "json"
+    indent: "  "
+  # validated by protobuf schema, serialized to msgpack binary format
+  msgpack:
+    enabled: true
+    # output dir
+    dir: "."
+    # output file extension, default 'msgpack'
+    extension: "msgpack"
+  # validated by protobuf schema, serialized to protobuf binary
+  pb_bytes:
+    enabled: true
+    # output dir
+    dir: "."
+    # output file extension, default 'bytes'
+    extension: "bytes"

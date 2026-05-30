@@ -1,0 +1,44 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Count": "100",
+      "Name": "Alice",
+      "Active": "1",
+      "Score": "95"
+    },
+    {
+      "ID": 2,
+      "Count": "-50",
+      "Name": "Bob",
+      "Score": "80"
+    },
+    {
+      "ID": 3,
+      "Name": "Charlie",
+      "Active": "1"
+    },
+    {
+      "ID": 4,
+      "Name": "Diana"
+    },
+    {
+      "ID": 5,
+      "Count": "999999",
+      "Name": "Eve",
+      "Active": "1",
+      "Score": "-10"
+    },
+    {
+      "ID": 6,
+      "Count": "1",
+      "Score": "100"
+    },
+    {
+      "ID": 7,
+      "Count": "-1",
+      "Name": "Grace",
+      "Score": "50"
+    }
+  ]
+}

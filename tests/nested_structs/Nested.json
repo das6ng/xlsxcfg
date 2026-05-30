@@ -1,0 +1,50 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Name": "Alice",
+      "Home": {
+        "Street": "123 Main St",
+        "City": "NYC",
+        "Zip": "10001"
+      },
+      "Info": {
+        "Email": "alice@test.com",
+        "Phone": "555-0001"
+      }
+    },
+    {
+      "ID": 2,
+      "Name": "Bob",
+      "Home": {
+        "Street": "456 Oak Ave",
+        "City": "LA",
+        "Zip": "90001"
+      },
+      "Info": {
+        "Email": "bob@test.com",
+        "Phone": "555-0002"
+      }
+    },
+    {
+      "ID": 3,
+      "Name": "Charlie",
+      "Home": {
+        "Street": "789 Pine Rd",
+        "City": "SF",
+        "Zip": "94102"
+      },
+      "Info": {
+        "Email": "charlie@test.com",
+        "Phone": "555-0003"
+      }
+    },
+    {
+      "ID": 4,
+      "Name": "Diana",
+      "Info": {
+        "Email": "diana@test.com"
+      }
+    }
+  ]
+}

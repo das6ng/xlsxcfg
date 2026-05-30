@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+import "deps.proto";
+
+message RepeatedSheetRow {
+    int32               ID     = 1;
+    string              Name   = 2;
+    repeated string     Tags   = 3;
+    repeated PhoneNumber Phones = 4;
+}
+
+message RepeatedSheet {
+    repeated RepeatedSheetRow List = 1;
+}

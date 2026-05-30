@@ -2,57 +2,148 @@ package xlsxcfg
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"iter"
 
 	"github.com/xuri/excelize/v2"
 )
 
-func LoadXlsxFiles(ctx context.Context, param *Config, files ...string) (data map[string][]any, err error) {
-	data = map[string][]any{}
-	var configData map[string][]any
-	for _, xlsFile := range files {
-		configData, err = loadXlsxFile(ctx, xlsFile, param)
-		if err != nil {
-			return
-		}
-		for sht, d := range configData {
-			if data[sht] != nil {
-				log.Printf("duplicated sheet[%s] in file: %s", sht, xlsFile)
-			}
-			data[sht] = d
-		}
-	}
-	return
+// SheetResult holds the sheet name and a row iterator for one sheet.
+// The Rows iterator yields parsed data rows (map[string]any) one at a time.
+// Rows must be fully consumed before the outer iteration advances to the
+// next sheet, because the underlying xlsx reader is shared.
+type SheetResult struct {
+	// Name is the xlsx sheet name (e.g., "Hero", "Item").
+	Name string
+	// Rows yields parsed data rows one at a time. Each row is a map[string]any
+	// matching the proto message structure. Empty rows are skipped.
+	Rows iter.Seq2[map[string]any, error]
 }
 
-func loadXlsxFile(ctx context.Context, filePath string, param *Config) (data map[string][]any, err error) {
-	f, err := excelize.OpenFile(filePath)
-	if err != nil {
-		return
-	}
-	defer f.Close()
+// IterXlsxFiles returns an iterator that yields one SheetResult per sheet
+// across all provided xlsx files. Sheets are streamed one at a time — only
+// one sheet's rows are held in memory at any point.
+//
+// Duplicate sheet names across files produce an error.
+//
+// Usage:
+//
+//	for sr, err := range xlsxcfg.IterXlsxFiles(ctx, param, "data.xlsx") {
+//	    if err != nil { ... }
+//	    fmt.Println("Sheet:", sr.Name)
+//	    for row, err := range sr.Rows {
+//	        if err != nil { ... }
+//	        process(row)
+//	    }
+//	}
+func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq2[*SheetResult, error] {
+	return func(yield func(*SheetResult, error) bool) {
+		seen := map[string]bool{}
+		for _, xlsFile := range files {
+			select {
+			case <-ctx.Done():
+				yield(nil, ctx.Err())
+				return
+			default:
+			}
 
-	sheets := f.WorkBook.Sheets.Sheet
-	data = make(map[string][]any, len(sheets))
-	for _, sh := range sheets {
-		sht, err1 := f.Cols(sh.Name)
-		if err1 != nil {
-			return nil, err1
+			f, err := excelize.OpenFile(xlsFile)
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+
+			sheets := f.WorkBook.Sheets.Sheet
+			for _, sh := range sheets {
+				if seen[sh.Name] {
+					f.Close()
+					yield(nil, fmt.Errorf("duplicated sheet[%s] in file: %s", sh.Name, xlsFile))
+					return
+				}
+				seen[sh.Name] = true
+
+				rows, err := f.Rows(sh.Name)
+				if err != nil {
+					f.Close()
+					yield(nil, err)
+					return
+				}
+
+				sr := &SheetResult{
+					Name: sh.Name,
+					Rows: makeRowIter(ctx, param, rows, sh.Name+param.Sheet.RowTypeSuffix),
+				}
+				if !yield(sr, nil) {
+					f.Close()
+					return
+				}
+			}
+			f.Close()
 		}
-		sp := newSheetParser(param)
-		sp.SetName(sh.Name + param.Sheet.RowTypeSuffix)
-		for sht.Next() {
-			cells, err := sht.Rows()
+	}
+}
+
+// makeRowIter creates a row iterator that streams parsed data rows one at a time.
+// It reads rows from excelize, classifies each (meta/comment/data), processes the
+// meta row through the rowParser to build closure mappings, then yields each data
+// row as it's parsed. Each call creates its own rowParser with isolated state,
+// avoiding closure-in-loop variable capture issues.
+func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeName string) iter.Seq2[map[string]any, error] {
+	// Per-sheet state — each call to makeRowIter gets its own copy.
+	rp := newRowParser(typeName, param)
+	rowNum := 0
+	hasMeta := false
+
+	return func(yield func(map[string]any, error) bool) {
+		for rows.Next() {
+			cells, err := rows.Columns()
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			n := rowNum
+			rowNum++
+
+			if param.IsMeta(n, cells) {
+				rp.Meta(ctx, cells)
+				hasMeta = true
+			} else if param.IsComment(n, cells) {
+				// skip comment rows
+			} else if param.IsData(n, cells) && hasMeta {
+				rowData, err := rp.Parse(ctx, cells)
+				if err != nil {
+					yield(nil, err)
+					return
+				}
+				if rowData != nil {
+					if !yield(rowData, nil) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+// LoadXlsxFiles loads and parses multiple Excel files, collecting all sheet data
+// into a single map keyed by sheet name. This is a convenience wrapper around
+// IterXlsxFiles that eagerly loads all rows into memory.
+//
+// For streaming (one row at a time), use IterXlsxFiles instead.
+func LoadXlsxFiles(ctx context.Context, param *Config, files ...string) (map[string][]any, error) {
+	data := map[string][]any{}
+	for sr, err := range IterXlsxFiles(ctx, param, files...) {
+		if err != nil {
+			return nil, err
+		}
+		rows := make([]any, 0)
+		for row, err := range sr.Rows {
 			if err != nil {
 				return nil, err
 			}
-			sp.Feed(cells)
+			rows = append(rows, row)
 		}
-		sheetData, err1 := sp.Parse(ctx)
-		if err1 != nil {
-			return nil, err1
-		}
-		data[sh.Name] = sheetData
+		data[sr.Name] = rows
 	}
-	return
+	return data, nil
 }

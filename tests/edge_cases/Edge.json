@@ -1,0 +1,23 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Label": "row1",
+      "Value": "10"
+    },
+    {
+      "ID": 3,
+      "Label": "row3"
+    },
+    {
+      "ID": 5,
+      "Label": "row5",
+      "Value": "50"
+    },
+    {
+      "ID": 6,
+      "Label": "row6",
+      "Value": "60"
+    }
+  ]
+}

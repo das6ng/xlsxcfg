@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message BenchAddress {
+    string City = 1;
+}
+
+message BenchSheetRow {
+    int32           ID      = 1;
+    string          Name    = 2;
+    BenchAddress    Addr    = 3;
+    repeated string Tags    = 4;
+}
+
+message BenchSheet {
+    repeated BenchSheetRow List = 1;
+}

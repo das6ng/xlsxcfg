@@ -1,0 +1,19 @@
+{
+  "List": [
+    {
+      "ID": 1,
+      "Name": "Warrior",
+      "Level": "10"
+    },
+    {
+      "ID": 2,
+      "Name": "Mage",
+      "Level": "5"
+    },
+    {
+      "ID": 3,
+      "Name": "Rogue",
+      "Level": "8"
+    }
+  ]
+}

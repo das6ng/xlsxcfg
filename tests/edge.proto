@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+option go_package = "github.com/dashengyeah/xlscfg/tests";
+
+message EdgeSheetRow {
+    int32  ID    = 1;
+    string Label = 2;
+    int64  Value = 3;
+}
+
+message EdgeSheet {
+    repeated EdgeSheetRow List = 1;
+}
