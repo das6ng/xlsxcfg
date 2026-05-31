@@ -24,9 +24,9 @@ sheet:
   # sheet name should add this suffix
   # to find the data row proto message.
   row_type_suffix: "SheetRow"
-  # optional suffix that marks a sheet for
+  # optional prefix or suffix that marks a sheet for
   # transposed parsing (column-per-record).
-  # e.g. "~" means sheet "Hero~" is parsed
+  # e.g. "~" means sheet "Hero~" or "~Hero" is parsed
   # column-wise. the mark is stripped before
   # proto type lookup.
   transpose_mark: ""

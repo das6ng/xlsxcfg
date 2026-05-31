@@ -64,8 +64,8 @@ type ConfigFile struct {
 		// RowTypeSuffix is appended to the sheet name to form the per-row message name.
 		// For example, with suffix "SheetRow", a sheet named "Hero" maps to "HeroSheetRow".
 		RowTypeSuffix string `yaml:"row_type_suffix"`
-		// TransposeMark is an optional suffix that marks a sheet for transposed parsing.
-		// When set (e.g., "~"), any xlsx sheet name ending with this mark is parsed
+		// TransposeMark is an optional prefix or suffix that marks a sheet for transposed parsing.
+		// When set (e.g., "~"), any xlsx sheet name starting or ending with this mark is parsed
 		// column-wise instead of row-wise. The mark is stripped before proto type resolution.
 		TransposeMark string `yaml:"transpose_mark"`
 	} `yaml:"sheet"`
@@ -184,19 +184,23 @@ func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.Fie
 
 // IsTransposed reports whether the given xlsx sheet name should be parsed in
 // transposed mode (column-per-record instead of row-per-record).
-// Returns true only when TransposeMark is non-empty and sheetName ends with it.
+// Returns true when TransposeMark is non-empty and sheetName starts or ends with it.
 func (c *ConfigFile) IsTransposed(sheetName string) bool {
 	mark := c.Sheet.TransposeMark
 	return mark != "" && (strings.HasPrefix(sheetName, mark) || strings.HasSuffix(sheetName, mark))
 }
 
-// StripTransposeMark removes the trailing TransposeMark from the sheet name.
-// If the mark is empty or the name doesn't end with it, returns the name unchanged.
+// StripTransposeMark removes the leading or trailing TransposeMark from the sheet name.
+// If the mark is empty or the name doesn't match it, returns the name unchanged.
 func (c *ConfigFile) StripTransposeMark(sheetName string) string {
 	if !c.IsTransposed(sheetName) {
 		return sheetName
 	}
-	return sheetName[:len(sheetName)-len(c.Sheet.TransposeMark)]
+	mark := c.Sheet.TransposeMark
+	if strings.HasPrefix(sheetName, mark) {
+		return sheetName[len(mark):]
+	}
+	return sheetName[:len(sheetName)-len(mark)]
 }
 
 // IsComment reports whether the row at 0-based index i is a comment row.

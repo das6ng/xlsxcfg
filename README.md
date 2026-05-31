@@ -93,9 +93,9 @@ sheet:
   # Suffix appended to sheet name to find the
   # per-row proto message.
   row_type_suffix: "SheetRow"
-  # Optional suffix that marks a sheet for
+  # Optional prefix or suffix that marks a sheet for
   # transposed parsing (column-per-record).
-  # e.g. "~" means sheet "Hero~" is parsed
+  # e.g. "~" means sheet "Hero~" or "~Hero" is parsed
   # column-wise. The mark is stripped before
   # proto type lookup and output file naming.
   transpose_mark: ""
@@ -207,8 +207,8 @@ Cells can contain `1` or `ACTIVE` — both resolve to the same enum value.
 
 ### Transposed sheets
 
-Set `transpose_mark` (e.g. `"~"`) to parse sheets column-wise — each column becomes one record instead of each row. Useful for data laid out horizontally in xlsx.
+Set `transpose_mark` (e.g. `"~"`) to parse sheets column-wise — each column becomes one record instead of each row. The mark can be a **prefix** or **suffix** of the sheet name. Useful for data laid out horizontally in xlsx.
 
-Sheet `Hero~` with `transpose_mark: "~"`:
+Sheets `Hero~` or `~Hero` with `transpose_mark: "~"`:
 - Column indices follow the same `comment_rows` / `meta_row` / `data_row_start` rules as row indices in normal mode.
-- The `~` suffix is stripped for proto type lookup (`HeroSheetRow`) and output file naming (`Hero.json`).
+- The mark is stripped for proto type lookup (`HeroSheetRow`) and output file naming (`Hero.json`).
