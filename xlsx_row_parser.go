@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // rowParser transforms Excel data rows into nested map[string]any structures
@@ -33,6 +35,11 @@ type rowParser struct {
 	// is a string type. Non-string fields are parsed as int64. This closure
 	// captures the proto type name so callers don't need to pass it each time.
 	isStr func(fieldPath string) bool
+
+	// getFieldDesc returns the proto FieldDescriptor for the leaf field at the
+	// given dot-separated typePath within the parser's message type. Returns nil
+	// if the path does not resolve to a field.
+	getFieldDesc func(fieldPath string) protoreflect.FieldDescriptor
 
 	// errStack accumulates parse errors (e.g., non-numeric value in an int field)
 	// during a single Parse() call. Only the first error is returned to the caller.
@@ -70,6 +77,9 @@ func newRowParser(typeName string, param *Config) *rowParser {
 		param: param,
 		isStr: func(fieldPath string) bool {
 			return param.IsStrField(typeName, fieldPath)
+		},
+		getFieldDesc: func(fieldPath string) protoreflect.FieldDescriptor {
+			return param.GetFieldDescriptor(typeName, fieldPath)
 		},
 	}
 }
@@ -184,18 +194,49 @@ func (p *rowParser) Parse(ctx context.Context, row []string) (map[string]any, er
 	return p.res, nil
 }
 
+// resolveEnumValue resolves a cell value for a proto enum field. It tries
+// ParseInt first (backward compatible with raw integer cells), then falls back
+// to looking up the value by name in the enum descriptor.
+func resolveEnumValue(fd protoreflect.FieldDescriptor, cellValue string) (int64, error) {
+	// Try raw integer first — preserves backward compatibility.
+	if n, err := strconv.ParseInt(cellValue, 10, 64); err == nil {
+		return n, nil
+	}
+	// Fall back to enum value name lookup.
+	ed := fd.Enum()
+	if ed == nil {
+		return 0, fmt.Errorf("field %q is not an enum", fd.Name())
+	}
+	evd := ed.Values().ByName(protoreflect.Name(cellValue))
+	if evd == nil {
+		return 0, fmt.Errorf("enum value %q not found in %s", cellValue, ed.Name())
+	}
+	return int64(evd.Number()), nil
+}
+
 // convertVal converts a cell's string value to the appropriate Go type based on
-// the proto field type at typePath. String fields keep the value as-is; all other
-// fields (int32, int64, enum, bool, etc.) are parsed as int64. Empty values in
-// non-string fields default to "0" so that missing cells produce zero rather than
-// a parse error.
+// the proto field type at typePath. String fields keep the value as-is; enum
+// fields try name resolution (with integer fallback); all other fields are
+// parsed as int64. Empty values in non-string fields default to "0" so that
+// missing cells produce zero rather than a parse error.
 func (p *rowParser) convertVal(typePath, fullIdent, v string) any {
 	var res any
 	if p.isStr(typePath) {
 		// String proto fields — keep the raw cell value.
 		res = v
+	} else if fd := p.getFieldDesc(typePath); fd != nil && fd.Kind() == protoreflect.EnumKind {
+		// Enum proto fields — try integer first, then name lookup.
+		if v == "" {
+			v = "0"
+		}
+		n, e := resolveEnumValue(fd, v)
+		if e != nil {
+			p.errStack = append(p.errStack, fmt.Errorf("parse col[%s]: %v", fullIdent, e))
+		} else {
+			res = n
+		}
 	} else {
-		// Non-string proto fields (int, enum, bool, etc.) — parse as int64.
+		// Non-string, non-enum proto fields (int, bool, etc.) — parse as int64.
 		// Default empty cells to "0" to avoid parse errors for optional fields.
 		if v == "" {
 			v = "0"

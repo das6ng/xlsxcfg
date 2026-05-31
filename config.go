@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,6 +64,10 @@ type ConfigFile struct {
 		// RowTypeSuffix is appended to the sheet name to form the per-row message name.
 		// For example, with suffix "SheetRow", a sheet named "Hero" maps to "HeroSheetRow".
 		RowTypeSuffix string `yaml:"row_type_suffix"`
+		// TransposeMark is an optional suffix that marks a sheet for transposed parsing.
+		// When set (e.g., "~"), any xlsx sheet name ending with this mark is parsed
+		// column-wise instead of row-wise. The mark is stripped before proto type resolution.
+		TransposeMark string `yaml:"transpose_mark"`
 	} `yaml:"sheet"`
 
 	// Output configures where and how converted data is written.
@@ -160,6 +165,38 @@ func (p *Config) IsStrField(typeName, fieldPath string) bool {
 		log.Fatalf("message %q cannot be found in proto messages", typeName)
 	}
 	return IsStrField(md, strings.Split(fieldPath, ".")...)
+}
+
+// GetFieldDescriptor returns the proto FieldDescriptor for the leaf field at the
+// given dot-separated fieldPath within the named proto message.
+// Returns nil if no TypeProvider is set, the message is not found, or the path
+// does not resolve to a field.
+func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.FieldDescriptor {
+	if p.tp == nil {
+		return nil
+	}
+	md := p.tp.MessageByName(typeName)
+	if md == nil {
+		return nil
+	}
+	return GetFieldDescriptor(md, strings.Split(fieldPath, ".")...)
+}
+
+// IsTransposed reports whether the given xlsx sheet name should be parsed in
+// transposed mode (column-per-record instead of row-per-record).
+// Returns true only when TransposeMark is non-empty and sheetName ends with it.
+func (c *ConfigFile) IsTransposed(sheetName string) bool {
+	mark := c.Sheet.TransposeMark
+	return mark != "" && strings.HasSuffix(sheetName, mark)
+}
+
+// StripTransposeMark removes the trailing TransposeMark from the sheet name.
+// If the mark is empty or the name doesn't end with it, returns the name unchanged.
+func (c *ConfigFile) StripTransposeMark(sheetName string) string {
+	if !c.IsTransposed(sheetName) {
+		return sheetName
+	}
+	return sheetName[:len(sheetName)-len(c.Sheet.TransposeMark)]
 }
 
 // IsComment reports whether the row at 0-based index i is a comment row.

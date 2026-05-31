@@ -62,16 +62,31 @@ func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq
 				}
 				seen[sh.Name] = true
 
-				rows, err := f.Rows(sh.Name)
-				if err != nil {
-					f.Close()
-					yield(nil, err)
-					return
+				cleanName := param.StripTransposeMark(sh.Name)
+				typeName := cleanName + param.Sheet.RowTypeSuffix
+
+				var rowIter iter.Seq2[map[string]any, error]
+				if param.IsTransposed(sh.Name) {
+					cols, err := f.Cols(sh.Name)
+					if err != nil {
+						f.Close()
+						yield(nil, err)
+						return
+					}
+					rowIter = makeColIter(ctx, param, cols, typeName)
+				} else {
+					rows, err := f.Rows(sh.Name)
+					if err != nil {
+						f.Close()
+						yield(nil, err)
+						return
+					}
+					rowIter = makeRowIter(ctx, param, rows, typeName)
 				}
 
 				sr := &SheetResult{
 					Name: sh.Name,
-					Rows: makeRowIter(ctx, param, rows, sh.Name+param.Sheet.RowTypeSuffix),
+					Rows: rowIter,
 				}
 				if !yield(sr, nil) {
 					f.Close()
@@ -109,6 +124,46 @@ func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeNa
 				hasMeta = true
 			} else if param.IsComment(n, cells) {
 				// skip comment rows
+			} else if param.IsData(n, cells) && hasMeta {
+				rowData, err := rp.Parse(ctx, cells)
+				if err != nil {
+					yield(nil, err)
+					return
+				}
+				if rowData != nil {
+					if !yield(rowData, nil) {
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+// makeColIter creates a column iterator for transposed sheets, where each column
+// is treated as one logical row. It mirrors makeRowIter but uses excelize.Cols to
+// iterate column-wise. The meta row index (meta_row), comment rows, and data_row_start
+// apply to column indices in this mode.
+func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeName string) iter.Seq2[map[string]any, error] {
+	rp := newRowParser(typeName, param)
+	colNum := 0
+	hasMeta := false
+
+	return func(yield func(map[string]any, error) bool) {
+		for cols.Next() {
+			cells, err := cols.Rows()
+			if err != nil {
+				yield(nil, err)
+				return
+			}
+			n := colNum
+			colNum++
+
+			if param.IsMeta(n, cells) {
+				rp.Meta(ctx, cells)
+				hasMeta = true
+			} else if param.IsComment(n, cells) {
+				// skip comment columns
 			} else if param.IsData(n, cells) && hasMeta {
 				rowData, err := rp.Parse(ctx, cells)
 				if err != nil {

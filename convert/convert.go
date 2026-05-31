@@ -32,9 +32,10 @@ func ScalarToProtoValue(fd protoreflect.FieldDescriptor, val any) protoreflect.V
 	switch fd.Kind() {
 	case protoreflect.StringKind:
 		return protoreflect.ValueOfString(val.(string))
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind,
-		protoreflect.EnumKind:
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		return protoreflect.ValueOfInt32(int32(val.(int64)))
+	case protoreflect.EnumKind:
+		return protoreflect.ValueOfEnum(protoreflect.EnumNumber(int32(val.(int64))))
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		return protoreflect.ValueOfInt64(val.(int64))
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:

@@ -117,36 +117,31 @@ func (p *protoTypeProvider) MessageByName(name string) protoreflect.MessageDescr
 	return p.ss[name]
 }
 
-// IsStrField walks a dot-separated field path through a message descriptor and
-// reports whether the leaf field is a string type. This is used by the row parser
-// to decide whether a cell value should be stored as a string or parsed as a number.
+// GetFieldDescriptor walks a dot-separated field path through a message descriptor
+// and returns the leaf FieldDescriptor. Returns nil if any segment in the path does
+// not resolve to a field.
 //
-// For example, given a message "Hero" with fields [name(string), stats(Stats)],
-//   - IsStrField(md, "name")       → true
-//   - IsStrField(md, "stats", "hp") → depends on Stats.hp field type
-//
-// If any segment in the path does not resolve to a field, returns false.
 // Map values are traversed into their value message type if present.
-func IsStrField(md protoreflect.MessageDescriptor, path ...string) bool {
+func GetFieldDescriptor(md protoreflect.MessageDescriptor, path ...string) protoreflect.FieldDescriptor {
 	var fieldDesc protoreflect.FieldDescriptor
 	for _, fieldName := range path {
 		fieldDesc = md.Fields().ByName(protoreflect.Name(fieldName))
 		if fieldDesc == nil {
-			// Field not found in the current message — path is invalid.
-			return false
+			return nil
 		}
 		// Descend into nested messages for the next path segment.
 		if fieldDesc.IsMap() {
-			// For map fields, descend into the value type's message (if it is one).
 			md = fieldDesc.MapValue().Message()
 		} else if m := fieldDesc.Message(); m != nil {
-			// For message fields, descend into the sub-message.
 			md = m
 		}
 	}
-	if fieldDesc == nil {
-		return false
-	}
-	// After walking the full path, check if the leaf field is a string kind.
-	return fieldDesc.Kind() == protoreflect.StringKind
+	return fieldDesc
+}
+
+// IsStrField reports whether the leaf field at the given path is a string type.
+// Delegates to GetFieldDescriptor for the path walk.
+func IsStrField(md protoreflect.MessageDescriptor, path ...string) bool {
+	fd := GetFieldDescriptor(md, path...)
+	return fd != nil && fd.Kind() == protoreflect.StringKind
 }

@@ -17,9 +17,9 @@ import (
 
 // Run executes the full xlsxcfg pipeline:
 //  1. Optionally load proto files.
-// 2. Warn about proto-validated formats when proto is disabled.
-// 3. Ensure output directories exist.
-// 4. Stream sheets from xlsx files and write enabled output formats.
+//  2. Warn about proto-validated formats when proto is disabled.
+//  3. Ensure output directories exist.
+//  4. Stream sheets from xlsx files and write enabled output formats.
 //
 // It logs progress and warnings; returns an error for fatal conditions.
 func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
@@ -42,7 +42,10 @@ func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 		if err != nil {
 			return fmt.Errorf("parse xlsx files: %w", err)
 		}
-		rows := CollectRows(sr.Name, sr.Rows)
+		rows, err := CollectRows(sr.Name, sr.Rows)
+		if err != nil {
+			return fmt.Errorf("sheet[%s]: %w", sr.Name, err)
+		}
 		if err := writeSheet(cfg, tp, sr.Name, rows); err != nil {
 			return err
 		}
@@ -50,16 +53,17 @@ func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 	return nil
 }
 
-// CollectRows drains the row iterator into a slice.
-func CollectRows(name string, rows iter.Seq2[map[string]any, error]) []any {
+// CollectRows drains the row iterator into a slice. Returns the first parse
+// error encountered instead of aborting the process.
+func CollectRows(name string, rows iter.Seq2[map[string]any, error]) ([]any, error) {
 	var out []any
 	for row, err := range rows {
 		if err != nil {
-			log.Fatalf("sheet[%s] parse row failed: %v\n", name, err)
+			return nil, fmt.Errorf("parse row failed: %w", err)
 		}
 		out = append(out, row)
 	}
-	return out
+	return out, nil
 }
 
 func warnProtoFormats(cfg *xlsxcfg.ConfigFile) {
@@ -81,13 +85,17 @@ func warnProtoFormats(cfg *xlsxcfg.ConfigFile) {
 }
 
 func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, rows []any) error {
+	// Strip the transpose mark from the sheet name for file naming and proto type lookup.
+	// The mark is a parsing hint and should not appear in output file names or proto type names.
+	cleanSheet := cfg.StripTransposeMark(sheet)
+
 	if cfg.Output.RawJSON.Enabled {
-		if _, err := writer.WriteRawJSON(cfg, sheet, rows); err != nil {
+		if _, err := writer.WriteRawJSON(cfg, cleanSheet, rows); err != nil {
 			return fmt.Errorf("sheet[%s] write raw json: %w", sheet, err)
 		}
 	}
 	if cfg.Output.RawMsgpack.Enabled {
-		if _, err := writer.WriteRawMsgpack(cfg, sheet, rows); err != nil {
+		if _, err := writer.WriteRawMsgpack(cfg, cleanSheet, rows); err != nil {
 			return fmt.Errorf("sheet[%s] write raw msgpack: %w", sheet, err)
 		}
 	}
@@ -96,7 +104,7 @@ func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, 
 		return nil
 	}
 
-	msg, err := BuildProtoMessage(cfg, tp, sheet, rows)
+	msg, err := BuildProtoMessage(cfg, tp, cleanSheet, rows)
 	if err != nil {
 		return err
 	}
@@ -105,17 +113,17 @@ func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, 
 	}
 
 	if cfg.Output.JSON.Enabled {
-		if _, err := writer.WriteProtoJSON(cfg, sheet, msg); err != nil {
+		if _, err := writer.WriteProtoJSON(cfg, cleanSheet, msg); err != nil {
 			return fmt.Errorf("sheet[%s] write proto json: %w", sheet, err)
 		}
 	}
 	if cfg.Output.Msgpack.Enabled {
-		if _, err := writer.WriteProtoMsgpack(cfg, sheet, msg); err != nil {
+		if _, err := writer.WriteProtoMsgpack(cfg, cleanSheet, msg); err != nil {
 			return fmt.Errorf("sheet[%s] write proto msgpack: %w", sheet, err)
 		}
 	}
 	if cfg.Output.PbBytes.Enabled {
-		if _, err := writer.WriteProtoBytes(cfg, sheet, msg); err != nil {
+		if _, err := writer.WriteProtoBytes(cfg, cleanSheet, msg); err != nil {
 			return fmt.Errorf("sheet[%s] write proto bytes: %w", sheet, err)
 		}
 	}

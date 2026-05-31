@@ -28,6 +28,7 @@ func TestIterXlsxFilesStreaming(t *testing.T) {
 			TypeSuffix    string `yaml:"type_suffix"`
 			ListFieldName string `yaml:"list_field_name"`
 			RowTypeSuffix string `yaml:"row_type_suffix"`
+			TransposeMark string `yaml:"transpose_mark"`
 		}{
 			CommentRows:   []int{1},
 			MetaRow:       2,
@@ -220,6 +221,7 @@ func makeTestConfig(protoFile string) *ConfigFile {
 			TypeSuffix    string `yaml:"type_suffix"`
 			ListFieldName string `yaml:"list_field_name"`
 			RowTypeSuffix string `yaml:"row_type_suffix"`
+			TransposeMark string `yaml:"transpose_mark"`
 		}{
 			CommentRows:   []int{1},
 			MetaRow:       2,
