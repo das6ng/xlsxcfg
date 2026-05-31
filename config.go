@@ -187,7 +187,7 @@ func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.Fie
 // Returns true only when TransposeMark is non-empty and sheetName ends with it.
 func (c *ConfigFile) IsTransposed(sheetName string) bool {
 	mark := c.Sheet.TransposeMark
-	return mark != "" && strings.HasSuffix(sheetName, mark)
+	return mark != "" && (strings.HasPrefix(sheetName, mark) || strings.HasSuffix(sheetName, mark))
 }
 
 // StripTransposeMark removes the trailing TransposeMark from the sheet name.
