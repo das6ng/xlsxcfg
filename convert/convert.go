@@ -1,26 +1,40 @@
-// Package convert provides functions to convert parsed xlsx data (map[string]any)
+// Package convert provides functions to convert parsed xlsx data
 // into protobuf dynamic messages via protoreflect.
 package convert
 
 import (
 	"fmt"
 
+	"github.com/das6ng/xlsxcfg"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// MapToProto populates a dynamic proto message from a map[string]any.
+// MapToProto populates a dynamic proto message from an *OrderedMap or map[string]any.
 // It walks the map recursively, matching keys to proto field names (PascalCase),
 // and sets values using protoreflect APIs — avoiding a JSON round-trip.
-func MapToProto(data map[string]any, msg protoreflect.Message) error {
+func MapToProto(data any, msg protoreflect.Message) error {
 	md := msg.Descriptor()
-	for k, v := range data {
-		fd := md.Fields().ByName(protoreflect.Name(k))
-		if fd == nil {
-			continue
+	switch d := data.(type) {
+	case *xlsxcfg.OrderedMap:
+		for k, v := range d.All() {
+			fd := md.Fields().ByName(protoreflect.Name(k))
+			if fd == nil {
+				continue
+			}
+			if err := setFieldValue(msg, fd, v); err != nil {
+				return err
+			}
 		}
-		if err := setFieldValue(msg, fd, v); err != nil {
-			return err
+	case map[string]any:
+		for k, v := range d {
+			fd := md.Fields().ByName(protoreflect.Name(k))
+			if fd == nil {
+				continue
+			}
+			if err := setFieldValue(msg, fd, v); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -85,11 +99,7 @@ func setRepeatedField(msg protoreflect.Message, fd protoreflect.FieldDescriptor,
 	for _, item := range list {
 		if fd.Message() != nil {
 			itemMsg := dynamicpb.NewMessage(fd.Message())
-			itemMap, ok := item.(map[string]any)
-			if !ok {
-				return fmt.Errorf("expected map for repeated message field %s item, got %T", fd.Name(), item)
-			}
-			if err := MapToProto(itemMap, itemMsg); err != nil {
+			if err := MapToProto(item, itemMsg); err != nil {
 				return err
 			}
 			protoList.Append(protoreflect.ValueOfMessage(itemMsg))
@@ -101,12 +111,8 @@ func setRepeatedField(msg protoreflect.Message, fd protoreflect.FieldDescriptor,
 }
 
 func setMessageField(msg protoreflect.Message, fd protoreflect.FieldDescriptor, val any) error {
-	subMap, ok := val.(map[string]any)
-	if !ok {
-		return fmt.Errorf("expected map for message field %s, got %T", fd.Name(), val)
-	}
 	subMsg := dynamicpb.NewMessage(fd.Message())
-	if err := MapToProto(subMap, subMsg); err != nil {
+	if err := MapToProto(val, subMsg); err != nil {
 		return err
 	}
 	msg.Set(fd, protoreflect.ValueOfMessage(subMsg))

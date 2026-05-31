@@ -75,6 +75,12 @@ type ConfigFile struct {
 		// Dir is the default directory where output files are written.
 		// Individual formats can override this with their own Dir field.
 		Dir string `yaml:"dir"`
+		// FieldOrder controls the ordering of fields in proto-validated output.
+		// "schema" (default) orders by proto field number.
+		// "source" orders by xlsx column order.
+		// Only applies to proto JSON and proto msgpack output; raw formats always
+		// use source order. Proto binary is always field-number ordered.
+		FieldOrder string `yaml:"field_order"`
 		// RawJSON outputs raw sheet data as JSON without proto schema validation.
 		RawJSON JSONOutputFormat `yaml:"raw_json"`
 		// RawMsgpack outputs raw sheet data as msgpack without proto schema validation.
@@ -180,6 +186,20 @@ func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.Fie
 		return nil
 	}
 	return GetFieldDescriptor(md, strings.Split(fieldPath, ".")...)
+}
+
+// FieldOrder returns the configured field ordering for output.
+// Returns "schema" (proto field number order) by default.
+func (c *ConfigFile) FieldOrder() string {
+	if c.Output.FieldOrder == "" {
+		return "schema"
+	}
+	return c.Output.FieldOrder
+}
+
+// IsSourceOrder reports whether output should use xlsx source column order.
+func (c *ConfigFile) IsSourceOrder() bool {
+	return c.FieldOrder() == "source"
 }
 
 // IsTransposed reports whether the given xlsx sheet name should be parsed in

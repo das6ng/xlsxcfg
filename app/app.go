@@ -55,7 +55,7 @@ func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 
 // CollectRows drains the row iterator into a slice. Returns the first parse
 // error encountered instead of aborting the process.
-func CollectRows(name string, rows iter.Seq2[map[string]any, error]) ([]any, error) {
+func CollectRows(name string, rows iter.Seq2[*xlsxcfg.OrderedMap, error]) ([]any, error) {
 	var out []any
 	for row, err := range rows {
 		if err != nil {
@@ -89,6 +89,14 @@ func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, 
 	// The mark is a parsing hint and should not appear in output file names or proto type names.
 	cleanSheet := cfg.StripTransposeMark(sheet)
 
+	// Extract xlsx column key order from the first row for source-order proto output.
+	var columnKeys []string
+	if cfg.IsSourceOrder() && len(rows) > 0 {
+		if om, ok := rows[0].(*xlsxcfg.OrderedMap); ok {
+			columnKeys = om.Keys()
+		}
+	}
+
 	if cfg.Output.RawJSON.Enabled {
 		if _, err := writer.WriteRawJSON(cfg, cleanSheet, rows); err != nil {
 			return fmt.Errorf("sheet[%s] write raw json: %w", sheet, err)
@@ -113,12 +121,12 @@ func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, 
 	}
 
 	if cfg.Output.JSON.Enabled {
-		if _, err := writer.WriteProtoJSON(cfg, cleanSheet, msg); err != nil {
+		if _, err := writer.WriteProtoJSON(cfg, cleanSheet, msg, columnKeys); err != nil {
 			return fmt.Errorf("sheet[%s] write proto json: %w", sheet, err)
 		}
 	}
 	if cfg.Output.Msgpack.Enabled {
-		if _, err := writer.WriteProtoMsgpack(cfg, cleanSheet, msg); err != nil {
+		if _, err := writer.WriteProtoMsgpack(cfg, cleanSheet, msg, columnKeys); err != nil {
 			return fmt.Errorf("sheet[%s] write proto msgpack: %w", sheet, err)
 		}
 	}
@@ -140,7 +148,8 @@ func BuildProtoMessage(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet s
 		return nil, nil
 	}
 	msg := dynamicpb.NewMessage(md)
-	data := map[string]any{cfg.Sheet.ListFieldName: rows}
+	data := xlsxcfg.NewOrderedMap(1)
+	data.Set(cfg.Sheet.ListFieldName, rows)
 	if err := convert.MapToProto(data, msg); err != nil {
 		return nil, fmt.Errorf("sheet[%s] populate proto message: %w", sheet, err)
 	}

@@ -14,14 +14,14 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// rowParser transforms Excel data rows into nested map[string]any structures
+// rowParser transforms Excel data rows into nested *OrderedMap structures
 // that mirror proto message layouts. During Meta(), it processes the header row
 // to build a system of getter/setter closures that know how to navigate and
 // populate the nested map for each column. During Parse(), it invokes those
 // closures with actual cell values to produce one row's data.
 //
 // The map representation uses:
-//   - map[string]any for proto message structs (keys = PascalCase field names)
+//   - *OrderedMap for proto message structs (keys = PascalCase field names, ordered by xlsx column)
 //   - []any for repeated/list fields (auto-expanded to fit the highest index)
 //
 // This design avoids reflection entirely — closures are built once during Meta()
@@ -49,9 +49,9 @@ type rowParser struct {
 	// the header row has not been processed first.
 	hasMeta bool
 
-	// res is the current row's data as a nested map. It is reset at the start
+	// res is the current row's data as a nested ordered map. It is reset at the start
 	// of each Parse() call and populated by the setter closures in set[].
-	res map[string]any
+	res *OrderedMap
 
 	// set is an ordered slice of setter closures, one per column. Each closure
 	// knows how to navigate the nested map (using fnGet/fnSet) and write the
@@ -105,7 +105,7 @@ func (p *rowParser) Meta(ctx context.Context, row []string) {
 	p.fnGet = make(map[string]func() any, len(row))
 	p.fnSet = make(map[string]func(v any), len(row))
 	p.set = make([]func(v string), 0, len(row))
-	p.res = make(map[string]any)
+	p.res = NewOrderedMap(len(row))
 	// The root getter: empty string key returns the top-level result map.
 	// All other fnGet/fnSet closures chain back to this via prevIdent.
 	p.fnGet[""] = func() any { return p.res }
@@ -151,7 +151,7 @@ func (p *rowParser) Meta(ctx context.Context, row []string) {
 //
 // Returns nil (not an empty map) for rows where all cells are empty.
 // Must be called after Meta(); returns an error otherwise.
-func (p *rowParser) Parse(ctx context.Context, row []string) (map[string]any, error) {
+func (p *rowParser) Parse(ctx context.Context, row []string) (*OrderedMap, error) {
 	if !p.hasMeta {
 		return nil, fmt.Errorf("row parser no metadata")
 	}
@@ -161,9 +161,9 @@ func (p *rowParser) Parse(ctx context.Context, row []string) (map[string]any, er
 		return nil, ctx.Err()
 	default:
 	}
-	// Fresh result map for this row. The closures from Meta() reference p.res,
+	// Fresh ordered map for this row. The closures from Meta() reference p.res,
 	// so they will write into this new map.
-	p.res = make(map[string]any)
+	p.res = NewOrderedMap(len(p.set))
 	p.errStack = nil
 
 	// Trim trailing empty cells — avoids invoking setters for trailing columns
@@ -271,7 +271,8 @@ func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx i
 	// if it doesn't exist or is too short, copying existing elements to the new
 	// larger slice.
 	p.fnGet[fullIdent] = func() any {
-		list := p.fnGet[prevIdent]().(map[string]any)[ident]
+		parent := p.fnGet[prevIdent]().(*OrderedMap)
+		list, _ := parent.Get(ident)
 		if list == nil || len(list.([]any)) <= idx {
 			if list != nil {
 				// Preserve existing elements when expanding.
@@ -283,7 +284,7 @@ func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx i
 				list = make([]any, idx+1)
 			}
 			// Write back the expanded slice to the parent map.
-			p.fnGet[prevIdent]().(map[string]any)[ident] = list
+			parent.Set(ident, list)
 		}
 		return list.([]any)[idx]
 	}
@@ -291,7 +292,8 @@ func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx i
 	// Setter: writes a value at idx in the list. Same auto-expansion logic as
 	// the getter, then assigns the value at the target index.
 	p.fnSet[fullIdent] = func(v any) {
-		list := p.fnGet[prevIdent]().(map[string]any)[ident]
+		parent := p.fnGet[prevIdent]().(*OrderedMap)
+		list, _ := parent.Get(ident)
 		if list == nil || len(list.([]any)) <= idx {
 			if list != nil {
 				oldList := list.([]any)
@@ -301,7 +303,7 @@ func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx i
 			} else {
 				list = make([]any, idx+1)
 			}
-			p.fnGet[prevIdent]().(map[string]any)[ident] = list
+			parent.Set(ident, list)
 		}
 		list.([]any)[idx] = v
 	}
@@ -335,17 +337,18 @@ func (p *rowParser) metaList(ident, prevIdent, fullIdent, typePath string, idx i
 func (p *rowParser) metaStruct(ident, prevIdent, fullIdent, typePath string) {
 	// Getter: return the value at ident in the parent map (may be nil).
 	p.fnGet[fullIdent] = func() any {
-		return p.fnGet[prevIdent]().(map[string]any)[ident]
+		v, _ := p.fnGet[prevIdent]().(*OrderedMap).Get(ident)
+		return v
 	}
 	// Setter: write a value at ident in the parent map. If the parent itself
 	// doesn't exist yet (nil), create it via the parent's setter first.
 	p.fnSet[fullIdent] = func(v any) {
 		prev := p.fnGet[prevIdent]()
 		if prev == nil {
-			prev = map[string]any{}
+			prev = NewOrderedMap(4)
 			p.fnSet[prevIdent](prev)
 		}
-		prev.(map[string]any)[ident] = v
+		prev.(*OrderedMap).Set(ident, v)
 	}
 }
 
@@ -364,9 +367,9 @@ func (p *rowParser) metaField(ident, prevIdent, fullIdent, typePath string) {
 		// Ensure the parent struct exists before writing into it.
 		prev := p.fnGet[prevIdent]()
 		if prev == nil {
-			prev = map[string]any{}
+			prev = NewOrderedMap(4)
 			p.fnSet[prevIdent](prev)
 		}
-		prev.(map[string]any)[ident] = p.convertVal(typePath, fullIdent, v)
+		prev.(*OrderedMap).Set(ident, p.convertVal(typePath, fullIdent, v))
 	})
 }

@@ -103,6 +103,10 @@ sheet:
 # Output file config
 output:
   dir: "."
+  # Field order for proto-validated output:
+  # "schema" (default) — order by proto field number
+  # "source" — order by xlsx source column order
+  field_order: "schema"
   # Raw JSON (no proto required)
   raw_json:
     enabled: true

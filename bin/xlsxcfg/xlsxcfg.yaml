@@ -35,6 +35,10 @@ sheet:
 output:
   # output dir
   dir: "."
+  # field order for proto-validated output:
+  # "schema" (default) — order by proto field number
+  # "source" — order by xlsx source column order
+  field_order: "schema"
   # no schema, just transform raw sheet data
   raw_json:
     enabled: true

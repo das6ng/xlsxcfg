@@ -39,6 +39,7 @@ func TestIterXlsxFilesStreaming(t *testing.T) {
 		},
 		Output: struct {
 			Dir        string           `yaml:"dir"`
+			FieldOrder string           `yaml:"field_order"`
 			RawJSON    JSONOutputFormat `yaml:"raw_json"`
 			RawMsgpack OutputFormat     `yaml:"raw_msgpack"`
 			JSON       JSONOutputFormat `yaml:"json"`
@@ -85,7 +86,7 @@ func TestIterXlsxFilesRowValues(t *testing.T) {
 	param := NewConfig(cfg, tp)
 
 	sheetCount := 0
-	var rows []map[string]any
+	var rows []*OrderedMap
 
 	for sr, err := range IterXlsxFiles(context.Background(), param, "tests/flat_fields/flat_fields.xlsx") {
 		require.NoError(t, err)
@@ -100,14 +101,19 @@ func TestIterXlsxFilesRowValues(t *testing.T) {
 	assert.Equal(t, 1, sheetCount)
 	require.Equal(t, 7, len(rows), "expected 7 data rows")
 
-	assert.Equal(t, int64(1), rows[0]["ID"])
-	assert.Equal(t, int64(100), rows[0]["Count"])
-	assert.Equal(t, "Alice", rows[0]["Name"])
-	assert.Equal(t, int64(-50), rows[1]["Count"])
+	id0, _ := rows[0].Get("ID")
+	assert.Equal(t, int64(1), id0)
+	count0, _ := rows[0].Get("Count")
+	assert.Equal(t, int64(100), count0)
+	name0, _ := rows[0].Get("Name")
+	assert.Equal(t, "Alice", name0)
+	count1, _ := rows[1].Get("Count")
+	assert.Equal(t, int64(-50), count1)
 	// Row 4: empty numeric cells are absent (not int64(0))
-	_, hasCount := rows[3]["Count"]
+	_, hasCount := rows[3].Get("Count")
 	assert.False(t, hasCount, "empty numeric field should not be set")
-	assert.Equal(t, "Diana", rows[3]["Name"])
+	name3, _ := rows[3].Get("Name")
+	assert.Equal(t, "Diana", name3)
 }
 
 // TestIterXlsxFilesDuplicateSheet verifies duplicate detection with the streaming API.
@@ -139,18 +145,19 @@ func TestIterXlsxFilesRepeatedFields(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Repeated", sr.Name)
 
-		var rows []map[string]any
+		var rows []*OrderedMap
 		for row, err := range sr.Rows {
 			require.NoError(t, err)
 			rows = append(rows, row)
 		}
 		require.Equal(t, 4, len(rows))
 
-		tags := rows[0]["Tags"].([]any)
-		assert.Equal(t, 3, len(tags))
-		assert.Equal(t, "go", tags[0])
-		assert.Equal(t, "rust", tags[1])
-		assert.Equal(t, "python", tags[2])
+		tags, _ := rows[0].Get("Tags")
+		tagSlice := tags.([]any)
+		assert.Equal(t, 3, len(tagSlice))
+		assert.Equal(t, "go", tagSlice[0])
+		assert.Equal(t, "rust", tagSlice[1])
+		assert.Equal(t, "python", tagSlice[2])
 	}
 }
 
@@ -165,16 +172,19 @@ func TestIterXlsxFilesNestedStructs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Nested", sr.Name)
 
-		var rows []map[string]any
+		var rows []*OrderedMap
 		for row, err := range sr.Rows {
 			require.NoError(t, err)
 			rows = append(rows, row)
 		}
 		require.Equal(t, 4, len(rows))
 
-		home := rows[0]["Home"].(map[string]any)
-		assert.Equal(t, "123 Main St", home["Street"])
-		assert.Equal(t, "NYC", home["City"])
+		homeVal, _ := rows[0].Get("Home")
+		home := homeVal.(*OrderedMap)
+		street, _ := home.Get("Street")
+		assert.Equal(t, "123 Main St", street)
+		city, _ := home.Get("City")
+		assert.Equal(t, "NYC", city)
 	}
 }
 
@@ -189,16 +199,20 @@ func TestIterXlsxFilesEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Edge", sr.Name)
 
-		var rows []map[string]any
+		var rows []*OrderedMap
 		for row, err := range sr.Rows {
 			require.NoError(t, err)
 			rows = append(rows, row)
 		}
 		assert.Equal(t, 4, len(rows))
-		assert.Equal(t, int64(1), rows[0]["ID"])
-		assert.Equal(t, int64(3), rows[1]["ID"])
-		assert.Equal(t, int64(5), rows[2]["ID"])
-		assert.Equal(t, int64(6), rows[3]["ID"])
+		id0, _ := rows[0].Get("ID")
+		assert.Equal(t, int64(1), id0)
+		id1, _ := rows[1].Get("ID")
+		assert.Equal(t, int64(3), id1)
+		id2, _ := rows[2].Get("ID")
+		assert.Equal(t, int64(5), id2)
+		id3, _ := rows[3].Get("ID")
+		assert.Equal(t, int64(6), id3)
 	}
 }
 
@@ -232,6 +246,7 @@ func makeTestConfig(protoFile string) *ConfigFile {
 		},
 		Output: struct {
 			Dir        string           `yaml:"dir"`
+			FieldOrder string           `yaml:"field_order"`
 			RawJSON    JSONOutputFormat `yaml:"raw_json"`
 			RawMsgpack OutputFormat     `yaml:"raw_msgpack"`
 			JSON       JSONOutputFormat `yaml:"json"`

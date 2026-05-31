@@ -9,15 +9,15 @@ import (
 )
 
 // SheetResult holds the sheet name and a row iterator for one sheet.
-// The Rows iterator yields parsed data rows (map[string]any) one at a time.
+// The Rows iterator yields parsed data rows (*OrderedMap) one at a time.
 // Rows must be fully consumed before the outer iteration advances to the
 // next sheet, because the underlying xlsx reader is shared.
 type SheetResult struct {
 	// Name is the xlsx sheet name (e.g., "Hero", "Item").
 	Name string
-	// Rows yields parsed data rows one at a time. Each row is a map[string]any
+	// Rows yields parsed data rows one at a time. Each row is an *OrderedMap
 	// matching the proto message structure. Empty rows are skipped.
-	Rows iter.Seq2[map[string]any, error]
+	Rows iter.Seq2[*OrderedMap, error]
 }
 
 // IterXlsxFiles returns an iterator that yields one SheetResult per sheet
@@ -65,7 +65,7 @@ func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq
 				cleanName := param.StripTransposeMark(sh.Name)
 				typeName := cleanName + param.Sheet.RowTypeSuffix
 
-				var rowIter iter.Seq2[map[string]any, error]
+				var rowIter iter.Seq2[*OrderedMap, error]
 				if param.IsTransposed(sh.Name) {
 					cols, err := f.Cols(sh.Name)
 					if err != nil {
@@ -103,13 +103,13 @@ func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq
 // meta row through the rowParser to build closure mappings, then yields each data
 // row as it's parsed. Each call creates its own rowParser with isolated state,
 // avoiding closure-in-loop variable capture issues.
-func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeName string) iter.Seq2[map[string]any, error] {
+func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeName string) iter.Seq2[*OrderedMap, error] {
 	// Per-sheet state — each call to makeRowIter gets its own copy.
 	rp := newRowParser(typeName, param)
 	rowNum := 0
 	hasMeta := false
 
-	return func(yield func(map[string]any, error) bool) {
+	return func(yield func(*OrderedMap, error) bool) {
 		for rows.Next() {
 			cells, err := rows.Columns()
 			if err != nil {
@@ -144,12 +144,12 @@ func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeNa
 // is treated as one logical row. It mirrors makeRowIter but uses excelize.Cols to
 // iterate column-wise. The meta row index (meta_row), comment rows, and data_row_start
 // apply to column indices in this mode.
-func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeName string) iter.Seq2[map[string]any, error] {
+func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeName string) iter.Seq2[*OrderedMap, error] {
 	rp := newRowParser(typeName, param)
 	colNum := 0
 	hasMeta := false
 
-	return func(yield func(map[string]any, error) bool) {
+	return func(yield func(*OrderedMap, error) bool) {
 		for cols.Next() {
 			cells, err := cols.Rows()
 			if err != nil {
