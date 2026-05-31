@@ -31,8 +31,8 @@ go test ./tests/flat_fields/     # single subdirectory test
 go test .                        # root package tests (no-proto mode, streaming)
 ```
 
-- 11 test files across 8 packages. Root package has tests (`optional_proto_test.go`, `xlsx_src_test.go`).
-- Main integration suite: `tests/cli_test.go` (~1500 lines, 25+ test cases covering all output formats, flag overrides, error cases).
+- 11 test files across 9 packages (65 total test/benchmark functions). Root package has tests (`optional_proto_test.go`, `xlsx_src_test.go`).
+- Main integration suite: `tests/cli_test.go` (~2100 lines, 40+ test cases covering all output formats, flag overrides, transpose, value replacement, enum fields, error cases).
 - Per-feature test directories under `tests/`: `flat_fields/`, `nested_structs/`, `repeated_fields/`, `edge_cases/`, `multi_sheet/`, `duplicate_sheet/`, `benchmark/`.
 - Test helpers: `tests/testutil/helpers.go` — `LoadFixture()` one-call setup.
 - Test xlsx fixtures in subdirectories are **gitignored** — they exist locally but aren't in the repo.
@@ -45,7 +45,7 @@ go test .                        # root package tests (no-proto mode, streaming)
 
 | Package | Purpose |
 |---------|---------|
-| `xlsxcfg` (root) | Core library — config (`config.go`), proto loading (`proto_src.go`), xlsx streaming (`xlsx_src.go`), row parsing (`xlsx_row_parser.go`), token/header parsing (`xlsx_token_reader.go`) |
+| `xlsxcfg` (root) | Core library — config (`config.go`), proto loading (`proto_src.go`), xlsx streaming (`xlsx_src.go`), row parsing (`xlsx_row_parser.go`), token/header parsing (`xlsx_token_reader.go`), ordered map (`ordered_map.go`) |
 | `bin/xlsxcfg/` | CLI entrypoint (cobra). Embeds default config via `//go:embed` |
 | `app/` | Pipeline orchestrator — wires config→proto→xlsx→writers |
 | `convert/` | `map[string]any` → `dynamicpb.Message` conversion via protoreflect |
@@ -57,10 +57,11 @@ go test .                        # root package tests (no-proto mode, streaming)
 ### Data Flow
 
 1. Parse `.proto` at runtime via `protocompile` → build `TypeProvider` (`proto_src.go`)
-2. Read `.xlsx` → iterate sheets **column-wise** → feed to `sheetParser`
-3. `sheetParser` identifies comment/meta/data rows via config, delegates to `rowParser`
+2. (Optional) Load constant xlsx files → `constant.Data` key-value lookup table (`constant/`)
+3. Read `.xlsx` → iterate sheets row-wise (or column-wise for transposed sheets) → feed to `rowParser`
 4. `rowParser` uses `tokenReader` to parse cell headers (dot-separated paths like `Phone.Region`, `#N` for list indices)
-5. Maps → JSON → dynamic proto messages via `convert.MapToProto()` → writer outputs in all enabled formats
+5. During parsing, cell values wrapped in `ref_quote` delimiters (e.g. `[Key]`) are replaced from constant data
+6. Rows → `OrderedMap` (preserving source column order) → `dynamicpb.Message` via `convert.MapToProto()` → writer outputs in all enabled formats
 
 ### Naming Convention
 

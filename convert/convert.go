@@ -1,5 +1,4 @@
-// Package convert provides functions to convert parsed xlsx data
-// into protobuf dynamic messages via protoreflect.
+// Package convert converts parsed xlsx data into protobuf dynamic messages.
 package convert
 
 import (
@@ -10,9 +9,8 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// MapToProto populates a dynamic proto message from an *OrderedMap or map[string]any.
-// It walks the map recursively, matching keys to proto field names (PascalCase),
-// and sets values using protoreflect APIs — avoiding a JSON round-trip.
+// MapToProto populates a dynamic proto message from an OrderedMap or map[string]any,
+// matching keys to proto field names directly — avoiding a JSON round-trip.
 func MapToProto(data any, msg protoreflect.Message) error {
 	md := msg.Descriptor()
 	switch d := data.(type) {
@@ -41,7 +39,6 @@ func MapToProto(data any, msg protoreflect.Message) error {
 }
 
 // ScalarToProtoValue converts a Go value from the xlsx parser to a protoreflect.Value.
-// The xlsx parser produces: int64 for all numeric fields, string for string fields.
 func ScalarToProtoValue(fd protoreflect.FieldDescriptor, val any) protoreflect.Value {
 	switch fd.Kind() {
 	case protoreflect.StringKind:
@@ -76,6 +73,7 @@ func ScalarToProtoValue(fd protoreflect.FieldDescriptor, val any) protoreflect.V
 	}
 }
 
+// setFieldValue dispatches value setting based on field type (list, message, or scalar).
 func setFieldValue(msg protoreflect.Message, fd protoreflect.FieldDescriptor, val any) error {
 	if val == nil {
 		return nil
@@ -90,6 +88,7 @@ func setFieldValue(msg protoreflect.Message, fd protoreflect.FieldDescriptor, va
 	}
 }
 
+// setRepeatedField populates a repeated proto field from a []any slice.
 func setRepeatedField(msg protoreflect.Message, fd protoreflect.FieldDescriptor, val any) error {
 	list, ok := val.([]any)
 	if !ok {
@@ -110,6 +109,7 @@ func setRepeatedField(msg protoreflect.Message, fd protoreflect.FieldDescriptor,
 	return nil
 }
 
+// setMessageField populates a nested message field via recursive MapToProto.
 func setMessageField(msg protoreflect.Message, fd protoreflect.FieldDescriptor, val any) error {
 	subMsg := dynamicpb.NewMessage(fd.Message())
 	if err := MapToProto(val, subMsg); err != nil {
@@ -119,6 +119,7 @@ func setMessageField(msg protoreflect.Message, fd protoreflect.FieldDescriptor, 
 	return nil
 }
 
+// setScalarField sets a scalar proto field using ScalarToProtoValue.
 func setScalarField(msg protoreflect.Message, fd protoreflect.FieldDescriptor, val any) error {
 	msg.Set(fd, ScalarToProtoValue(fd, val))
 	return nil

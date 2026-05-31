@@ -31,6 +31,22 @@ sheet:
   # proto type lookup.
   transpose_mark: ""
 
+# optional constant value replacement config
+# cell values matching ref_quote delimiters (e.g. [Key])
+# are replaced with the corresponding constant value.
+constant:
+  enabled: false
+  # number of leading rows to skip in constant sheets
+  skip_rows: 1
+  # prefix that marks a key as a comment line
+  comment: "#"
+  # delimiters wrapping reference keys in cell values
+  ref_quote:
+    l: "["
+    r: "]"
+  # xlsx files containing key-value constant sheets
+  files: []
+
 # output file config
 output:
   # output dir

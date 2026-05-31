@@ -8,33 +8,20 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// SheetResult holds the sheet name and a row iterator for one sheet.
-// The Rows iterator yields parsed data rows (*OrderedMap) one at a time.
-// Rows must be fully consumed before the outer iteration advances to the
-// next sheet, because the underlying xlsx reader is shared.
+// SheetResult holds a sheet name and a row iterator.
+// Rows must be fully consumed before advancing to the next sheet
+// because the underlying xlsx reader is shared.
 type SheetResult struct {
-	// Name is the xlsx sheet name (e.g., "Hero", "Item").
-	Name string
-	// Rows yields parsed data rows one at a time. Each row is an *OrderedMap
-	// matching the proto message structure. Empty rows are skipped.
-	Rows iter.Seq2[*OrderedMap, error]
+	Name string                       // xlsx sheet name (e.g., "Hero", "Item")
+	Rows iter.Seq2[*OrderedMap, error] // yields parsed data rows; empty rows are skipped
 }
 
-// IterXlsxFiles returns an iterator that yields one SheetResult per sheet
-// across all provided xlsx files. Sheets are streamed one at a time — only
-// one sheet's rows are held in memory at any point.
-//
-// Duplicate sheet names across files produce an error.
-//
-// Usage:
+// IterXlsxFiles returns an iterator yielding one SheetResult per sheet across all xlsx files.
+// Only one sheet's rows are in memory at a time. Duplicate sheet names produce an error.
 //
 //	for sr, err := range xlsxcfg.IterXlsxFiles(ctx, param, "data.xlsx") {
 //	    if err != nil { ... }
-//	    fmt.Println("Sheet:", sr.Name)
-//	    for row, err := range sr.Rows {
-//	        if err != nil { ... }
-//	        process(row)
-//	    }
+//	    for row, err := range sr.Rows { ... }
 //	}
 func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq2[*SheetResult, error] {
 	return func(yield func(*SheetResult, error) bool) {
@@ -98,13 +85,10 @@ func IterXlsxFiles(ctx context.Context, param *Config, files ...string) iter.Seq
 	}
 }
 
-// makeRowIter creates a row iterator that streams parsed data rows one at a time.
-// It reads rows from excelize, classifies each (meta/comment/data), processes the
-// meta row through the rowParser to build closure mappings, then yields each data
-// row as it's parsed. Each call creates its own rowParser with isolated state,
-// avoiding closure-in-loop variable capture issues.
+// makeRowIter creates a row iterator that classifies rows (meta/comment/data),
+// processes the meta row, then yields parsed data rows. Each call gets its own
+// rowParser with isolated state.
 func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeName string) iter.Seq2[*OrderedMap, error] {
-	// Per-sheet state — each call to makeRowIter gets its own copy.
 	rp := newRowParser(typeName, param)
 	rowNum := 0
 	hasMeta := false
@@ -123,7 +107,6 @@ func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeNa
 				rp.Meta(ctx, cells)
 				hasMeta = true
 			} else if param.IsComment(n, cells) {
-				// skip comment rows
 			} else if param.IsData(n, cells) && hasMeta {
 				rowData, err := rp.Parse(ctx, cells)
 				if err != nil {
@@ -141,9 +124,8 @@ func makeRowIter(ctx context.Context, param *Config, rows *excelize.Rows, typeNa
 }
 
 // makeColIter creates a column iterator for transposed sheets, where each column
-// is treated as one logical row. It mirrors makeRowIter but uses excelize.Cols to
-// iterate column-wise. The meta row index (meta_row), comment rows, and data_row_start
-// apply to column indices in this mode.
+// is one logical row. Row indices (meta_row, comment_rows, data_row_start) apply
+// to column indices in this mode.
 func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeName string) iter.Seq2[*OrderedMap, error] {
 	rp := newRowParser(typeName, param)
 	colNum := 0
@@ -163,7 +145,6 @@ func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeNa
 				rp.Meta(ctx, cells)
 				hasMeta = true
 			} else if param.IsComment(n, cells) {
-				// skip comment columns
 			} else if param.IsData(n, cells) && hasMeta {
 				rowData, err := rp.Parse(ctx, cells)
 				if err != nil {
@@ -180,11 +161,8 @@ func makeColIter(ctx context.Context, param *Config, cols *excelize.Cols, typeNa
 	}
 }
 
-// LoadXlsxFiles loads and parses multiple Excel files, collecting all sheet data
-// into a single map keyed by sheet name. This is a convenience wrapper around
-// IterXlsxFiles that eagerly loads all rows into memory.
-//
-// For streaming (one row at a time), use IterXlsxFiles instead.
+// LoadXlsxFiles eagerly loads all sheets from multiple xlsx files into a map keyed
+// by sheet name. For streaming, use IterXlsxFiles instead.
 func LoadXlsxFiles(ctx context.Context, param *Config, files ...string) (map[string][]any, error) {
 	data := map[string][]any{}
 	for sr, err := range IterXlsxFiles(ctx, param, files...) {

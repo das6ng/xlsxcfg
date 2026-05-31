@@ -100,6 +100,22 @@ sheet:
   # proto type lookup and output file naming.
   transpose_mark: ""
 
+# Optional constant value replacement.
+# Cell values matching ref_quote delimiters (e.g. [Key])
+# are replaced with the corresponding constant value.
+constant:
+  enabled: false
+  # Number of leading rows to skip in constant sheets.
+  skip_rows: 1
+  # Prefix that marks a key as a comment line.
+  comment: "#"
+  # Delimiters wrapping reference keys in cell values.
+  ref_quote:
+    l: "["
+    r: "]"
+  # xlsx files containing key-value constant sheets.
+  files: []
+
 # Output file config
 output:
   dir: "."
@@ -140,11 +156,22 @@ output:
 
 | Format | Key | Proto required | Extension | Description |
 |--------|-----|---------------|-----------|-------------|
-| Raw JSON | `raw_json` | No | `.json` | `map[string]any` → JSON |
-| Raw Msgpack | `raw_msgpack` | No | `.msgpack` | `map[string]any` → msgpack |
-| Proto JSON | `json` | Yes | `.json` | `dynamicpb` → protojson |
-| Proto Msgpack | `msgpack` | Yes | `.msgpack` | proto → JSON → msgpack |
-| Protobuf Binary | `pb_bytes` | Yes | `.bytes` | `proto.Marshal` binary |
+| Raw JSON | `raw_json` | No | `.json` | OrderedMap → JSON (source column order) |
+| Raw Msgpack | `raw_msgpack` | No | `.msgpack` | OrderedMap → msgpack (source column order) |
+| Proto JSON | `json` | Yes | `.json` | `dynamicpb` → protojson (field order per `field_order`) |
+| Proto Msgpack | `msgpack` | Yes | `.msgpack` | proto → JSON → msgpack (field order per `field_order`) |
+| Protobuf Binary | `pb_bytes` | Yes | `.bytes` | `proto.Marshal` binary (always field number order) |
+
+### Field ordering
+
+All output is **deterministic** — running the same input twice produces byte-identical output.
+
+| Mode | Field order |
+|------|------------|
+| Schema-less (raw JSON, raw msgpack) | xlsx source column order |
+| Proto JSON/msgpack with `field_order: "schema"` (default) | proto field number order |
+| Proto JSON/msgpack with `field_order: "source"` | xlsx source column order |
+| Protobuf binary | always proto field number order (wire format) |
 
 ### Dynamic flags
 
@@ -157,6 +184,9 @@ xlsxcfg example.xlsx --output.pb_bytes.enabled=true
 
 # Override arrays
 xlsxcfg example.xlsx --sheet.comment_rows=[1,2]
+
+# Enable value replacement via flags
+xlsxcfg example.xlsx --constant.enabled=true --constant.files=[constants.xlsx]
 ```
 
 ## Examples
@@ -216,3 +246,20 @@ Set `transpose_mark` (e.g. `"~"`) to parse sheets column-wise — each column be
 Sheets `Hero~` or `~Hero` with `transpose_mark: "~"`:
 - Column indices follow the same `comment_rows` / `meta_row` / `data_row_start` rules as row indices in normal mode.
 - The mark is stripped for proto type lookup (`HeroSheetRow`) and output file naming (`Hero.json`).
+
+### Value replacement (constants)
+
+Enable the `constant` section to substitute cell values at parse time. Constant xlsx files contain key-value pairs (two columns: key, value). Cell values wrapped in `ref_quote` delimiters (e.g. `[HeroHP]`) are replaced with the corresponding constant value before type conversion.
+
+```yaml
+constant:
+  enabled: true
+  skip_rows: 1
+  comment: "#"
+  ref_quote:
+    l: "["
+    r: "]"
+  files: ["constants.xlsx"]
+```
+
+In this example, a cell containing `[HeroHP]` is looked up in the constant data and replaced with the stored value (e.g. `1000`). Keys not found in the constant data are left unchanged. Later files overwrite earlier keys.

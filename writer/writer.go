@@ -1,6 +1,4 @@
-// Package writer writes parsed xlsx sheet data to files in various formats:
-// raw JSON, raw msgpack, proto-validated JSON, proto-validated msgpack,
-// and protobuf binary.
+// Package writer writes parsed xlsx sheet data to files in various formats.
 package writer
 
 import (
@@ -19,7 +17,6 @@ import (
 )
 
 // ext returns the file extension from config, adding a leading dot if needed.
-// Falls back to the given default when config extension is empty.
 func ext(cfgExt, defaultExt string) string {
 	if cfgExt == "" {
 		return defaultExt
@@ -31,7 +28,6 @@ func ext(cfgExt, defaultExt string) string {
 }
 
 // WriteRawJSON writes sheet data as JSON without proto validation.
-// Returns the output file path.
 func WriteRawJSON(cfg *xlsxcfg.ConfigFile, sheet string, rows []any) (string, error) {
 	dir := cfg.ResolveDir(cfg.Output.RawJSON.Dir)
 	data := xlsxcfg.NewOrderedMap(1)
@@ -61,9 +57,7 @@ func WriteRawMsgpack(cfg *xlsxcfg.ConfigFile, sheet string, rows []any) (string,
 	return writeFile(dir, sheet, ext(cfg.Output.RawMsgpack.Extension, ".msgpack"), buf)
 }
 
-// WriteProtoJSON writes proto-validated data as JSON.
-// When field_order is "source", columnKeys is used to reorder fields in each row
-// to match the xlsx column order.
+// WriteProtoJSON writes proto-validated data as JSON, optionally reordered to match xlsx column order.
 func WriteProtoJSON(cfg *xlsxcfg.ConfigFile, sheet string, msg proto.Message, columnKeys []string) (string, error) {
 	dir := cfg.ResolveDir(cfg.Output.JSON.Dir)
 	opts := protojson.MarshalOptions{
@@ -83,9 +77,8 @@ func WriteProtoJSON(cfg *xlsxcfg.ConfigFile, sheet string, msg proto.Message, co
 	return writeFile(dir, sheet, ext(cfg.Output.JSON.Extension, ".json"), buf)
 }
 
-// WriteProtoMsgpack writes proto-validated data as msgpack via JSON intermediate.
-// Uses OrderedMap to preserve field ordering. When field_order is "source",
-// columnKeys reorders fields to match xlsx column order.
+// WriteProtoMsgpack writes proto-validated data as msgpack via JSON intermediate,
+// optionally reordered to match xlsx column order.
 func WriteProtoMsgpack(cfg *xlsxcfg.ConfigFile, sheet string, msg proto.Message, columnKeys []string) (string, error) {
 	dir := cfg.ResolveDir(cfg.Output.Msgpack.Dir)
 	jsonBuf, err := protojson.MarshalOptions{}.Marshal(msg)
@@ -109,13 +102,8 @@ func WriteProtoMsgpack(cfg *xlsxcfg.ConfigFile, sheet string, msg proto.Message,
 	return writeFile(dir, sheet, ext(cfg.Output.Msgpack.Extension, ".msgpack"), buf)
 }
 
-// reorderProtoJSON reorders the fields within each list element of a proto JSON
-// output to match the given columnKeys order. The JSON has the structure:
-//
-//	{"ListFieldName": [{"Field1": ..., "Field2": ...}, ...]}
-//
-// Fields not present in columnKeys retain their original position after
-// the ordered fields.
+// reorderProtoJSON reorders fields within each list element to match columnKeys order.
+// The JSON has structure: {"ListFieldName": [{"Field1": ..., "Field2": ...}, ...]}.
 func reorderProtoJSON(jsonBuf []byte, listFieldName string, columnKeys []string) ([]byte, error) {
 	var top xlsxcfg.OrderedMap
 	if err := json.Unmarshal(jsonBuf, &top); err != nil {
@@ -129,7 +117,6 @@ func reorderProtoJSON(jsonBuf []byte, listFieldName string, columnKeys []string)
 	if !ok {
 		return jsonBuf, nil
 	}
-	// Build a key-order index for fast lookup
 	keyOrder := make(map[string]int, len(columnKeys))
 	for i, k := range columnKeys {
 		if _, exists := keyOrder[k]; !exists {
@@ -143,17 +130,13 @@ func reorderProtoJSON(jsonBuf []byte, listFieldName string, columnKeys []string)
 		}
 		list[i] = reorderMap(rowMap, keyOrder)
 	}
-	// Also reorder the top-level keys to place listFieldName first
 	topReordered := reorderMap(&top, map[string]int{listFieldName: 0})
 	return json.Marshal(topReordered)
 }
 
-// reorderMap returns a new OrderedMap with keys reordered: keys present in
-// keyOrder come first (in keyOrder index order), then remaining keys in
-// their original order.
+// reorderMap returns a new OrderedMap with keys in keyOrder index order first, then remaining keys.
 func reorderMap(om *xlsxcfg.OrderedMap, keyOrder map[string]int) *xlsxcfg.OrderedMap {
 	keys := om.Keys()
-	// Separate ordered and remaining keys
 	ordered := make([]string, 0, len(keys))
 	remaining := make([]string, 0, len(keys))
 	for _, k := range keys {
@@ -163,7 +146,6 @@ func reorderMap(om *xlsxcfg.OrderedMap, keyOrder map[string]int) *xlsxcfg.Ordere
 			remaining = append(remaining, k)
 		}
 	}
-	// Sort ordered keys by their keyOrder index
 	slices.SortFunc(ordered, func(a, b string) int {
 		return cmp.Compare(keyOrder[a], keyOrder[b])
 	})
@@ -180,8 +162,6 @@ func reorderMap(om *xlsxcfg.OrderedMap, keyOrder map[string]int) *xlsxcfg.Ordere
 }
 
 // WriteProtoBytes writes proto-validated data as protobuf binary.
-// Field ordering is always by proto field number (wire format), regardless of
-// field_order setting.
 func WriteProtoBytes(cfg *xlsxcfg.ConfigFile, sheet string, msg proto.Message) (string, error) {
 	dir := cfg.ResolveDir(cfg.Output.PbBytes.Dir)
 	buf, err := proto.Marshal(msg)
@@ -210,15 +190,14 @@ func EnsureOutputDirs(cfg *xlsxcfg.ConfigFile) error {
 	return nil
 }
 
-// writeFile writes data to dir/sheet+ext and returns the output file path.
+// writeFile writes data to dir/sheet+ext.
 func writeFile(dir, sheet, ext string, data []byte) (string, error) {
 	outFile := path.Join(dir, sheet+ext)
 	return outFile, os.WriteFile(outFile, data, 0644)
 }
 
-// msgpackMarshalOrdered serializes a value to msgpack, preserving the key
-// ordering of *OrderedMap values. The standard msgpack library doesn't respect
-// json.Marshaler, so we manually walk the structure.
+// msgpackMarshalOrdered serializes a value to msgpack preserving OrderedMap key order.
+// The standard msgpack library doesn't respect json.Marshaler, so we manually walk the structure.
 func msgpackMarshalOrdered(v any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := msgpack.NewEncoder(&buf)
@@ -228,8 +207,7 @@ func msgpackMarshalOrdered(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// encodeOrdered recursively encodes a value using the msgpack encoder,
-// preserving *OrderedMap key order.
+// encodeOrdered recursively encodes a value, preserving OrderedMap key order.
 func encodeOrdered(enc *msgpack.Encoder, v any) error {
 	if v == nil {
 		return enc.EncodeNil()

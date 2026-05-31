@@ -6,95 +6,62 @@ import (
 	"os"
 	"strings"
 
+	"github.com/das6ng/xlsxcfg/constant"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"gopkg.in/yaml.v3"
 )
 
-// OutputFormat configures a single output format (e.g. protobuf binary, msgpack).
+// OutputFormat configures a single output format.
 type OutputFormat struct {
-	// Enabled controls whether this output format is generated.
-	Enabled bool `yaml:"enabled"`
-	// Dir is the output directory for this format. When empty, inherits from Output.Dir.
-	Dir string `yaml:"dir"`
-	// Extension is the output file extension including the dot (e.g. ".json", ".bytes").
-	// When empty, uses the format's default extension.
-	Extension string `yaml:"extension"`
+	Enabled   bool   `yaml:"enabled"`
+	Dir       string `yaml:"dir"`       // inherits from Output.Dir when empty
+	Extension string `yaml:"extension"` // e.g. ".json", ".bytes"; uses format default when empty
 }
 
-// JSONOutputFormat extends OutputFormat with JSON-specific settings.
+// JSONOutputFormat adds JSON-specific settings to OutputFormat.
 type JSONOutputFormat struct {
 	OutputFormat `yaml:",inline"`
-	// Indent controls the indentation of JSON output (e.g. "  " for 2-space indent).
-	// Empty string produces compact JSON.
-	Indent string `yaml:"indent"`
+	Indent string `yaml:"indent"` // e.g. "  "; empty produces compact JSON
 }
 
-// ConfigFile represents the YAML configuration file (typically xlsxcfg.yaml)
-// that controls how xlsx sheets are mapped to proto messages and how output
-// is written. It is divided into three sections: proto, sheet, and output.
+// ConfigFile represents the YAML configuration that controls how xlsx sheets map to
+// proto messages and how output is written.
 type ConfigFile struct {
 	// Proto configures which .proto files to load and where to resolve imports.
 	Proto struct {
-		// Enabled controls whether proto loading is enabled.
-		Enabled bool `yaml:"enabled"`
-		// Files lists the .proto file names to compile (e.g. ["hero.proto"]).
-		Files []string `yaml:"files"`
-		// ImportPaths lists directories to search for proto imports (like protoc's -I flag).
-		ImportPath []string `yaml:"import_path"`
+		Enabled     bool     `yaml:"enabled"`
+		Files       []string `yaml:"files"`        // e.g. ["hero.proto"]
+		ImportPath  []string `yaml:"import_path"`  // like protoc's -I flag
 	} `yaml:"proto"`
 
-	// Sheet configures how rows in each xlsx sheet are classified and how
-	// sheet names map to proto message names.
+	// Sheet configures row classification and sheet-to-proto name mapping.
 	Sheet struct {
-		// CommentRows is a list of 1-based row indices that contain comments
-		// (skipped during parsing). Row indices are 1-based to match Excel's display.
-		CommentRows []int `yaml:"comment_rows"`
-		// MetaRow is the 1-based row index of the metadata row, which typically
-		// contains field type hints or other annotations above the data.
-		MetaRow int `yaml:"meta_row"`
-		// DataRowStart is the 1-based row index where actual data rows begin.
-		// Must be greater than MetaRow.
-		DataRowStart int `yaml:"data_row_start"`
-		// TypeSuffix is appended to the sheet name to form the wrapper message name.
-		// For example, with suffix "Sheet", a sheet named "Hero" maps to "HeroSheet".
-		TypeSuffix string `yaml:"type_suffix"`
-		// ListFieldName is the field name used in the wrapper message for the
-		// repeated row list (e.g. "rows" in message HeroSheet { repeated HeroSheetRow rows = 1; }).
-		ListFieldName string `yaml:"list_field_name"`
-		// RowTypeSuffix is appended to the sheet name to form the per-row message name.
-		// For example, with suffix "SheetRow", a sheet named "Hero" maps to "HeroSheetRow".
-		RowTypeSuffix string `yaml:"row_type_suffix"`
-		// TransposeMark is an optional prefix or suffix that marks a sheet for transposed parsing.
-		// When set (e.g., "~"), any xlsx sheet name starting or ending with this mark is parsed
-		// column-wise instead of row-wise. The mark is stripped before proto type resolution.
-		TransposeMark string `yaml:"transpose_mark"`
+		CommentRows   []int  `yaml:"comment_rows"`    // 1-based row indices to skip
+		MetaRow       int    `yaml:"meta_row"`         // 1-based row index for metadata/type hints
+		DataRowStart  int    `yaml:"data_row_start"`   // 1-based; must be > MetaRow
+		TypeSuffix    string `yaml:"type_suffix"`      // e.g. "Sheet" → "Hero" maps to "HeroSheet"
+		ListFieldName string `yaml:"list_field_name"`  // e.g. "rows" in `repeated HeroSheetRow rows = 1;`
+		RowTypeSuffix string `yaml:"row_type_suffix"`  // e.g. "SheetRow" → "Hero" maps to "HeroSheetRow"
+		TransposeMark string `yaml:"transpose_mark"`   // prefix/suffix marking transposed sheets (e.g. "~")
 	} `yaml:"sheet"`
+
+	// Constant configures optional key-value constant loading from xlsx files.
+	// Cell values matching [Key] are replaced with the corresponding constant value.
+	Constant constant.Config `yaml:"constant"`
 
 	// Output configures where and how converted data is written.
 	Output struct {
-		// Dir is the default directory where output files are written.
-		// Individual formats can override this with their own Dir field.
-		Dir string `yaml:"dir"`
-		// FieldOrder controls the ordering of fields in proto-validated output.
-		// "schema" (default) orders by proto field number.
-		// "source" orders by xlsx column order.
-		// Only applies to proto JSON and proto msgpack output; raw formats always
-		// use source order. Proto binary is always field-number ordered.
-		FieldOrder string `yaml:"field_order"`
-		// RawJSON outputs raw sheet data as JSON without proto schema validation.
-		RawJSON JSONOutputFormat `yaml:"raw_json"`
-		// RawMsgpack outputs raw sheet data as msgpack without proto schema validation.
-		RawMsgpack OutputFormat `yaml:"raw_msgpack"`
-		// JSON outputs proto-validated data serialized as JSON.
-		JSON JSONOutputFormat `yaml:"json"`
-		// Msgpack outputs proto-validated data serialized as msgpack.
-		Msgpack OutputFormat `yaml:"msgpack"`
-		// PbBytes outputs proto-validated data serialized as protobuf binary.
-		PbBytes OutputFormat `yaml:"pb_bytes"`
+		Dir         string          `yaml:"dir"`          // default output directory
+		FieldOrder  string          `yaml:"field_order"`  // "schema" (proto field#) or "source" (xlsx column order)
+		RawJSON     JSONOutputFormat  `yaml:"raw_json"`     // raw JSON without proto validation
+		RawMsgpack  OutputFormat      `yaml:"raw_msgpack"`  // raw msgpack without proto validation
+		JSON        JSONOutputFormat  `yaml:"json"`         // proto-validated JSON
+		Msgpack     OutputFormat      `yaml:"msgpack"`      // proto-validated msgpack
+		PbBytes     OutputFormat      `yaml:"pb_bytes"`     // proto-validated protobuf binary
 	} `yaml:"output"`
 }
 
-// ConfigFromFile reads and parses a YAML configuration file at the given path.
+// ConfigFromFile reads and parses a YAML configuration file.
 func ConfigFromFile(f string) (*ConfigFile, error) {
 	c := &ConfigFile{}
 	if bs, err := os.ReadFile(f); err != nil {
@@ -105,9 +72,7 @@ func ConfigFromFile(f string) (*ConfigFile, error) {
 	return c, nil
 }
 
-// DefaultConfig returns a ConfigFile with sensible defaults: proto disabled,
-// only raw_json enabled. These defaults allow the tool to work without a
-// config file for simple use cases.
+// DefaultConfig returns a ConfigFile with proto disabled and only raw_json enabled.
 func DefaultConfig() *ConfigFile {
 	c := &ConfigFile{}
 	c.Proto.Enabled = false
@@ -136,17 +101,14 @@ func (c *ConfigFile) ResolveDir(formatDir string) string {
 	return "."
 }
 
-// Config combines the parsed YAML configuration with a TypeProvider for runtime
-// proto field type lookups. It is the main configuration object used throughout
-// the parsing pipeline.
+// Config combines ConfigFile with a TypeProvider for runtime proto field lookups.
 type Config struct {
 	*ConfigFile
-	// tp provides proto message descriptors for field type resolution during parsing.
-	tp TypeProvider
+	tp        TypeProvider     // proto message descriptors for field type resolution
+	ConstData *constant.Data   // nil when constant loading is disabled
 }
 
-// NewConfig creates a runtime Config by combining a parsed ConfigFile with a
-// TypeProvider loaded from the proto files specified in the config.
+// NewConfig creates a runtime Config from a ConfigFile and TypeProvider.
 func NewConfig(cfg *ConfigFile, tp TypeProvider) *Config {
 	return &Config{
 		ConfigFile: cfg,
@@ -154,14 +116,8 @@ func NewConfig(cfg *ConfigFile, tp TypeProvider) *Config {
 	}
 }
 
-// IsStrField checks whether the leaf field at the given dot-separated fieldPath
-// within the named proto message is a string type. This is used during row
-// parsing to decide whether a cell value should be treated as a string literal
-// or parsed as a numeric value.
-//
-// typeName is the short proto message name (e.g. "HeroSheetRow").
-// fieldPath is a dot-separated path like "Phone.Region".
-// When no TypeProvider is set (proto disabled), all fields are treated as strings.
+// IsStrField checks whether the leaf field at the dot-separated fieldPath within
+// the named proto message is a string type. Returns true for all fields when proto is disabled.
 func (p *Config) IsStrField(typeName, fieldPath string) bool {
 	if p.tp == nil {
 		return true
@@ -174,9 +130,7 @@ func (p *Config) IsStrField(typeName, fieldPath string) bool {
 }
 
 // GetFieldDescriptor returns the proto FieldDescriptor for the leaf field at the
-// given dot-separated fieldPath within the named proto message.
-// Returns nil if no TypeProvider is set, the message is not found, or the path
-// does not resolve to a field.
+// dot-separated fieldPath, or nil if not resolvable.
 func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.FieldDescriptor {
 	if p.tp == nil {
 		return nil
@@ -188,8 +142,7 @@ func (p *Config) GetFieldDescriptor(typeName, fieldPath string) protoreflect.Fie
 	return GetFieldDescriptor(md, strings.Split(fieldPath, ".")...)
 }
 
-// FieldOrder returns the configured field ordering for output.
-// Returns "schema" (proto field number order) by default.
+// FieldOrder returns the configured field ordering, defaulting to "schema" (proto field number order).
 func (c *ConfigFile) FieldOrder() string {
 	if c.Output.FieldOrder == "" {
 		return "schema"
@@ -197,21 +150,19 @@ func (c *ConfigFile) FieldOrder() string {
 	return c.Output.FieldOrder
 }
 
-// IsSourceOrder reports whether output should use xlsx source column order.
+// IsSourceOrder reports whether output should use xlsx column order.
 func (c *ConfigFile) IsSourceOrder() bool {
 	return c.FieldOrder() == "source"
 }
 
-// IsTransposed reports whether the given xlsx sheet name should be parsed in
-// transposed mode (column-per-record instead of row-per-record).
-// Returns true when TransposeMark is non-empty and sheetName starts or ends with it.
+// IsTransposed reports whether sheetName should be parsed column-per-record
+// instead of row-per-record.
 func (c *ConfigFile) IsTransposed(sheetName string) bool {
 	mark := c.Sheet.TransposeMark
 	return mark != "" && (strings.HasPrefix(sheetName, mark) || strings.HasSuffix(sheetName, mark))
 }
 
-// StripTransposeMark removes the leading or trailing TransposeMark from the sheet name.
-// If the mark is empty or the name doesn't match it, returns the name unchanged.
+// StripTransposeMark removes the leading or trailing TransposeMark from sheetName.
 func (c *ConfigFile) StripTransposeMark(sheetName string) string {
 	if !c.IsTransposed(sheetName) {
 		return sheetName
@@ -224,8 +175,7 @@ func (c *ConfigFile) StripTransposeMark(sheetName string) string {
 }
 
 // IsComment reports whether the row at 0-based index i is a comment row.
-// The config stores comment row indices as 1-based (matching Excel display),
-// so we compare against i+1.
+// Compares against 1-based config values (i+1).
 func (p *Config) IsComment(i int, row []string) bool {
 	for _, l := range p.ConfigFile.Sheet.CommentRows {
 		if l == i+1 {
@@ -235,26 +185,19 @@ func (p *Config) IsComment(i int, row []string) bool {
 	return false
 }
 
-// IsMeta reports whether the row at 0-based index i is the metadata row.
-// The config stores MetaRow as a 1-based index, so we compare against i+1.
+// IsMeta reports whether the row at 0-based index i is the metadata row (compares i+1 against 1-based MetaRow).
 func (p *Config) IsMeta(i int, row []string) bool {
 	return i+1 == p.ConfigFile.Sheet.MetaRow
 }
 
-// IsData reports whether the row at 0-based index i is a data row.
-// A row is a data row if its 1-based index (i+1) is at or past DataRowStart.
+// IsData reports whether the row at 0-based index i is a data row (i+1 >= DataRowStart).
 func (p *Config) IsData(i int, row []string) bool {
 	return i+1 >= p.Sheet.DataRowStart
 }
 
-// Validate checks that the configuration is well-formed:
-//   - data_row_start must be greater than meta_row (when both are positive)
-//   - comment_rows must not overlap with meta_row
-//   - type_suffix and row_type_suffix must be set when proto is enabled
-//   - proto.files must not be empty when proto is enabled
-//   - at least one output format must be enabled
-//
-// Returns an error describing the first validation failure, or nil if valid.
+// Validate checks that the configuration is well-formed: data_row_start > meta_row,
+// no comment/meta overlap, suffixes and proto files set when proto is enabled,
+// and at least one output format enabled.
 func (c *ConfigFile) Validate() error {
 	if c.Sheet.MetaRow > 0 && c.Sheet.DataRowStart > 0 && c.Sheet.DataRowStart <= c.Sheet.MetaRow {
 		return fmt.Errorf("sheet.data_row_start (%d) must be greater than sheet.meta_row (%d)", c.Sheet.DataRowStart, c.Sheet.MetaRow)

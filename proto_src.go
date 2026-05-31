@@ -1,10 +1,8 @@
-// Package xlsxcfg provides the core library for converting Excel (.xlsx) sheets
-// into Protocol Buffer-defined config data (JSON and protobuf binary output).
+// Package xlsxcfg converts Excel (.xlsx) sheets into Protocol Buffer-defined config data.
 //
-// The conversion pipeline is:
-//  1. Parse .proto files at runtime → build TypeProvider
-//  2. Read .xlsx → iterate sheets column-wise → sheetParser → rowParser → tokenReader
-//  3. Produce Maps → JSON → dynamic proto messages → .json and/or .bytes output
+// Pipeline: parse .proto → build TypeProvider → optionally load constants →
+// read .xlsx row-wise (or column-wise for transposed sheets) → parse rows into
+// OrderedMaps → convert to dynamicpb.Messages → write output (JSON, msgpack, protobuf binary).
 package xlsxcfg
 
 import (
@@ -16,26 +14,17 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// TypeProvider looks up proto message descriptors by their short name (e.g. "HeroSheet").
-// The name is intentionally misspelled — do not rename it.
-//
-// It is the primary bridge between the proto schema and the xlsx parser: the row
-// parser uses it to find message descriptors so it can determine field types,
-// walk nested messages, and build dynamic proto messages for output.
+// TypeProvider looks up proto message descriptors by short name (e.g. "HeroSheet").
+// The row parser uses it to determine field types, walk nested messages, and build
+// dynamic proto messages.
 type TypeProvider interface {
-	// MessageByName returns the MessageDescriptor for the given short message name
-	// (e.g. "HeroSheetRow"), or nil if no such message exists across all loaded proto files.
+	// MessageByName returns the MessageDescriptor for the given short name, or nil.
 	MessageByName(string) protoreflect.MessageDescriptor
 }
 
-// LoadProtoFiles compiles the given .proto files at runtime using protocompile,
-// so no protoc binary or code-generation step is needed for user schemas.
-//
-// importPaths sets the directories where proto imports are resolved from
-// (analogous to protoc's -I flag). fileNames are the .proto files to compile.
-//
-// Returns a TypeProvider that indexes all top-level messages from the compiled
-// files (and their transitive imports) by short name.
+// LoadProtoFiles compiles .proto files at runtime using protocompile (no protoc needed).
+// Returns a TypeProvider indexing all top-level messages from the compiled files
+// and their transitive imports by short name.
 func LoadProtoFiles(ctx context.Context, importPaths []string, fileNames ...string) (tp TypeProvider, err error) {
 	compiler := protocompile.Compiler{
 		// WithStandardImports resolves well-known types like google.protobuf.Any.
@@ -52,19 +41,14 @@ func LoadProtoFiles(ctx context.Context, importPaths []string, fileNames ...stri
 	return
 }
 
-// protoTypeProvider implements TypeProvider by indexing all message descriptors
-// from compiled proto files by their short (unqualified) name.
+// protoTypeProvider indexes message descriptors from compiled proto files by short name.
 type protoTypeProvider struct {
-	// fds holds all compiled file descriptors (including transitive imports),
-	// keyed by file path (e.g. "hero.proto"). Used for deduplication during loading.
-	fds map[string]linker.File
-	// ss maps short message name → MessageDescriptor for O(1) lookup.
-	ss map[string]protoreflect.MessageDescriptor
+	fds map[string]linker.File                    // keyed by file path, for deduplication
+	ss  map[string]protoreflect.MessageDescriptor // short name → descriptor
 }
 
-// newTypeProvider builds a protoTypeProvider from the given compiled files.
-// It recursively registers each file and its imports, then indexes all top-level
-// messages by short name.
+// newTypeProvider builds a protoTypeProvider from compiled files, recursively
+// registering each file and its imports, then indexing top-level messages.
 func newTypeProvider(files ...linker.File) (TypeProvider, error) {
 	d := &protoTypeProvider{
 		fds: make(map[string]linker.File, len(files)),
@@ -74,7 +58,6 @@ func newTypeProvider(files ...linker.File) (TypeProvider, error) {
 		if err := addFile(fd, d.fds); err != nil {
 			return nil, err
 		}
-		// Index all top-level messages from this file by their short name.
 		msgs := fd.Messages()
 		for i := 0; i < msgs.Len(); i++ {
 			t := msgs.Get(i)
@@ -84,21 +67,17 @@ func newTypeProvider(files ...linker.File) (TypeProvider, error) {
 	return d, nil
 }
 
-// addFile recursively registers a compiled proto file and all its transitive
-// imports into the fds map. It detects duplicate files with the same path but
-// different contents (which would indicate a conflicting import).
+// addFile recursively registers a compiled proto file and its transitive imports.
+// Returns an error if the same file path appears with different contents.
 func addFile(fd linker.File, fds map[string]linker.File) error {
 	name := fd.Path()
 	if existing, ok := fds[name]; ok {
-		// already added this file
 		if existing != fd {
-			// doh! duplicate files provided
 			return fmt.Errorf("given files include multiple copies of %s", name)
 		}
 		return nil
 	}
 	fds[name] = fd
-	// Walk transitive imports so they are all registered.
 	imports := fd.Imports()
 	for i := 0; i < imports.Len(); i++ {
 		dep := imports.Get(i).FileDescriptor
@@ -111,17 +90,14 @@ func addFile(fd linker.File, fds map[string]linker.File) error {
 	return nil
 }
 
-// MessageByName returns the MessageDescriptor for the given short message name,
-// or nil if not found.
+// MessageByName returns the MessageDescriptor for the given short name, or nil.
 func (p *protoTypeProvider) MessageByName(name string) protoreflect.MessageDescriptor {
 	return p.ss[name]
 }
 
 // GetFieldDescriptor walks a dot-separated field path through a message descriptor
-// and returns the leaf FieldDescriptor. Returns nil if any segment in the path does
-// not resolve to a field.
-//
-// Map values are traversed into their value message type if present.
+// and returns the leaf FieldDescriptor, or nil if any segment doesn't resolve.
+// Map values are traversed into their value message type.
 func GetFieldDescriptor(md protoreflect.MessageDescriptor, path ...string) protoreflect.FieldDescriptor {
 	var fieldDesc protoreflect.FieldDescriptor
 	for _, fieldName := range path {
@@ -129,7 +105,6 @@ func GetFieldDescriptor(md protoreflect.MessageDescriptor, path ...string) proto
 		if fieldDesc == nil {
 			return nil
 		}
-		// Descend into nested messages for the next path segment.
 		if fieldDesc.IsMap() {
 			md = fieldDesc.MapValue().Message()
 		} else if m := fieldDesc.Message(); m != nil {
@@ -140,7 +115,6 @@ func GetFieldDescriptor(md protoreflect.MessageDescriptor, path ...string) proto
 }
 
 // IsStrField reports whether the leaf field at the given path is a string type.
-// Delegates to GetFieldDescriptor for the path walk.
 func IsStrField(md protoreflect.MessageDescriptor, path ...string) bool {
 	fd := GetFieldDescriptor(md, path...)
 	return fd != nil && fd.Kind() == protoreflect.StringKind

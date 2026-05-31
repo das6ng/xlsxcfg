@@ -1,5 +1,4 @@
-// Package app orchestrates the xlsxcfg pipeline: load proto, iterate xlsx sheets,
-// collect rows, and write outputs in all configured formats.
+// Package app orchestrates the xlsxcfg pipeline.
 package app
 
 import (
@@ -9,19 +8,15 @@ import (
 	"log"
 
 	"github.com/das6ng/xlsxcfg"
+	"github.com/das6ng/xlsxcfg/constant"
 	"github.com/das6ng/xlsxcfg/convert"
 	"github.com/das6ng/xlsxcfg/writer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-// Run executes the full xlsxcfg pipeline:
-//  1. Optionally load proto files.
-//  2. Warn about proto-validated formats when proto is disabled.
-//  3. Ensure output directories exist.
-//  4. Stream sheets from xlsx files and write enabled output formats.
-//
-// It logs progress and warnings; returns an error for fatal conditions.
+// Run executes the full pipeline: load proto/constants, stream xlsx sheets,
+// and write all enabled output formats.
 func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 	var tp xlsxcfg.TypeProvider
 	if cfg.Proto.Enabled {
@@ -32,12 +27,19 @@ func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 		}
 	}
 
+	// Load constant key-value data for value replacement.
+	constData, err := constant.Load(ctx, &cfg.Constant)
+	if err != nil {
+		return fmt.Errorf("load constants: %w", err)
+	}
+
 	warnProtoFormats(cfg)
 	if err := writer.EnsureOutputDirs(cfg); err != nil {
 		return fmt.Errorf("create output dirs: %w", err)
 	}
 
 	param := xlsxcfg.NewConfig(cfg, tp)
+	param.ConstData = constData
 	for sr, err := range xlsxcfg.IterXlsxFiles(ctx, param, files...) {
 		if err != nil {
 			return fmt.Errorf("parse xlsx files: %w", err)
@@ -53,8 +55,7 @@ func Run(ctx context.Context, cfg *xlsxcfg.ConfigFile, files []string) error {
 	return nil
 }
 
-// CollectRows drains the row iterator into a slice. Returns the first parse
-// error encountered instead of aborting the process.
+// CollectRows drains the row iterator into a slice.
 func CollectRows(name string, rows iter.Seq2[*xlsxcfg.OrderedMap, error]) ([]any, error) {
 	var out []any
 	for row, err := range rows {
@@ -66,6 +67,7 @@ func CollectRows(name string, rows iter.Seq2[*xlsxcfg.OrderedMap, error]) ([]any
 	return out, nil
 }
 
+// warnProtoFormats logs warnings when proto-validated formats are enabled but proto is disabled.
 func warnProtoFormats(cfg *xlsxcfg.ConfigFile) {
 	if cfg.Proto.Enabled {
 		return
@@ -84,9 +86,8 @@ func warnProtoFormats(cfg *xlsxcfg.ConfigFile) {
 	}
 }
 
+// writeSheet writes a single sheet's data in all enabled output formats.
 func writeSheet(cfg *xlsxcfg.ConfigFile, tp xlsxcfg.TypeProvider, sheet string, rows []any) error {
-	// Strip the transpose mark from the sheet name for file naming and proto type lookup.
-	// The mark is a parsing hint and should not appear in output file names or proto type names.
 	cleanSheet := cfg.StripTransposeMark(sheet)
 
 	// Extract xlsx column key order from the first row for source-order proto output.

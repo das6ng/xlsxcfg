@@ -1,5 +1,4 @@
-// Package flagutil provides dynamic CLI flag parsing that deep-merges
-// unrecognized --key=value arguments into a ConfigFile via YAML round-trip.
+// Package flagutil deep-merges unrecognized --key=value CLI args into a ConfigFile.
 package flagutil
 
 import (
@@ -11,9 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ApplyOverrides collects unrecognized --key=value args and deep-merges them
-// into cfg via a YAML marshal/unmarshal round-trip.
-// knownFlags maps flag names (e.g. "--config", "-c") that should be skipped.
+// ApplyOverrides deep-merges unrecognized --key=value args into cfg via YAML round-trip.
 func ApplyOverrides(args []string, knownFlags map[string]bool, cfg *xlsxcfg.ConfigFile) error {
 	overrides := map[string]string{}
 	for _, arg := range args {
@@ -77,7 +74,7 @@ func DeepMerge(m map[string]any, key string, value string) {
 	current[parts[len(parts)-1]] = ParseValue(value)
 }
 
-// ParseValue converts a string value to the appropriate Go type for YAML merging.
+// ParseValue converts a string to the appropriate Go type (bool, int, []any, or string).
 func ParseValue(s string) any {
 	if s == "true" {
 		return true
